@@ -379,9 +379,6 @@ tr.item-pendente:hover td{background:#fff5dc;}
   <div class="nav-sec">Administrativo</div>
   <button class="nav-item active" id="navadm-visao" onclick="goAdm('visao',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Visão geral</button>
   <button class="nav-item" id="navadm-cotacoes" onclick="goAdm('cotacoes',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Cotações</button>
-  <button class="nav-item" id="navadm-gastos" onclick="goAdm('gastos',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6h12"/></svg>Gastos</button>
-  <button class="nav-item" id="navadm-forn" onclick="goAdm('forn',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>Fornecedores</button>
-  <button class="nav-item" id="navadm-cc" onclick="goAdm('cc',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>Centros de custo</button>
 </nav>
     <div class="sb-footer">
       <button class="btn-export" onclick="exportExcel()" id="btn-export-xl" style="display:none">
@@ -905,7 +902,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
   <div class="modal-hd"><h3 id="admcot-title">Nova cotação</h3><button class="modal-close" onclick="closeModal('modal-admcot')">×</button></div>
   <input type="hidden" id="admcot-id"/>
   <div class="fg form-row"><label>Item / serviço *</label><input id="admcot-item" placeholder="Ex: Monitores, Locação de salas"/></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:160px"><label>Fornecedor</label><select id="admcot-forn" onchange="admAutoCC('admcot-forn','admcot-cc')"></select></div><div class="fg" style="flex:1;min-width:140px"><label>Departamento / centro de custo</label><select id="admcot-cc"></select></div></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:160px"><label>Fornecedor</label><input id="admcot-forn" placeholder="Nome do fornecedor"/></div><div class="fg" style="flex:1;min-width:140px"><label>Departamento / centro de custo</label><input id="admcot-cc" placeholder="Ex: TECH, Compras, MKT"/></div></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Solicitante</label><input id="admcot-solic"/></div><div class="fg" style="flex:1;min-width:100px"><label>Quantidade</label><input id="admcot-qtd" inputmode="decimal"/></div></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Valor inicial (orçado)</label><input id="admcot-vini" inputmode="decimal" placeholder="0,00"/></div><div class="fg" style="flex:1;min-width:140px"><label>Valor final (cotado)</label><input id="admcot-vfin" inputmode="decimal" placeholder="0,00"/></div></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Data inicial</label><input id="admcot-data" type="date"/></div><div class="fg" style="flex:1;min-width:140px"><label>Data final</label><input id="admcot-dataf" type="date"/></div></div>
@@ -3498,32 +3495,33 @@ function admAutoCC(fornSelId,ccSelId){ const fn=document.getElementById(fornSelI
 /* ===================== VISÃO GERAL ===================== */
 function renderAdmVisao(){
   const el=document.getElementById('page-adm-visao'); if(!el) return;
-  const gastoTotal=ADM_GASTOS.reduce((s,g)=>s+admNum(g.valor),0);
-  // economia: soma (valor_inicial - valor_final) das cotacoes
-  let economia=0; ADM_COT.forEach(c=>{ const vi=admNum(c.valor_inicial),vf=admNum(c.valor_final); if(vi>0&&vf>0&&vi>=vf) economia+=vi-vf; });
-  const porCC={}; ADM_GASTOS.forEach(g=>{ const k=g.centro_custo||'Sem centro'; porCC[k]=(porCC[k]||0)+admNum(g.valor); });
-  const ccLabels=Object.keys(porCC), ccVals=ccLabels.map(k=>porCC[k]);
-  const porForn={}; ADM_GASTOS.forEach(g=>{ if(g.fornecedor){ porForn[g.fornecedor]=(porForn[g.fornecedor]||0)+admNum(g.valor); } });
-  const fornRank=Object.entries(porForn).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const itens={}; ADM_COT.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
+  let orcado=0,cotacao=0,realizado=0;
+  Object.values(itens).forEach(rows=>{ const vis=rows.map(r=>admNum(r.valor_inicial)).filter(v=>v>0); const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); orcado+=vis.length?Math.max(...vis):0; cotacao+=vfs.length?Math.min(...vfs):0; const sel=rows.find(r=>r.selecionado); if(sel) realizado+=admNum(sel.valor_final); });
+  const economia=(realizado>0?orcado-realizado:orcado-cotacao);
+  const porDep={}; ADM_COT.forEach(c=>{ const k=c.centro_custo||'Sem centro'; const vf=admNum(c.valor_final); if(vf>0) porDep[k]=(porDep[k]||0)+vf; });
+  const depLabels=Object.keys(porDep), depVals=depLabels.map(k=>porDep[k]);
+  const ecoForn={}; ADM_COT.forEach(c=>{ const vi=admNum(c.valor_inicial),vf=admNum(c.valor_final); if(c.fornecedor&&vi>0&&vf>0&&vi>=vf) ecoForn[c.fornecedor]=(ecoForn[c.fornecedor]||0)+(vi-vf); });
+  const fornRank=Object.entries(ecoForn).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const kpis=[
-    {l:'Gasto total',v:fmtBR(gastoTotal),c:'red',s:'realizado'},
-    {l:'Economia em cotações',v:fmtBR(economia),c:'green',s:'inicial − final'},
-    {l:'Fornecedores',v:ADM_FORN.length,c:'blue',s:'cadastrados'},
-    {l:'Cotações',v:ADM_COT.length,c:'amber',s:'registradas'},
+    {l:'Orçado',v:fmtBR(orcado),c:'amber',s:'valor inicial'},
+    {l:'Cotação',v:fmtBR(cotacao),c:'blue',s:'melhor preço'},
+    {l:'Realizado',v:fmtBR(realizado),c:'green',s:'selecionado'},
+    {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'negociação'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
-  let rank='';
-  if(fornRank.length){ const maxv=fornRank[0][1]||1; rank=fornRank.map(([n,v])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${admEsc(n)}</span><span style="font-family:'DM Mono',monospace">${fmtBR(v)}</span></div><div style="height:6px;background:var(--surface2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(v/maxv*100).toFixed(0)}%;background:var(--blue)"></div></div></div>`).join(''); }
-  else rank='<p style="font-size:12px;color:var(--text3)">Sem gastos com fornecedores ainda.</p>';
-  el.innerHTML=admHead('Visão geral','Resumo financeiro administrativo')+
+  let rank;
+  if(fornRank.length){ const maxv=fornRank[0][1]||1; rank=fornRank.map(([n,v])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${admEsc(n)}</span><span style="font-family:'DM Mono',monospace;color:var(--green)">${fmtBR(v)}</span></div><div style="height:6px;background:var(--surface2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(v/maxv*100).toFixed(0)}%;background:var(--green)"></div></div></div>`).join(''); }
+  else rank='<p style="font-size:12px;color:var(--text3)">Sem economia registrada ainda.</p>';
+  el.innerHTML=admHead('Visão geral','Resumo das cotações')+
     `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>
      <div style="display:flex;flex-wrap:wrap;gap:14px">
-       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Gasto por centro de custo</div><div style="height:260px"><canvas id="adm-ch-cc"></canvas></div></div>
-       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Top fornecedores por gasto</div>${rank}</div>
+       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por departamento</div><div style="height:260px"><canvas id="adm-ch-cc"></canvas></div></div>
+       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Economia por fornecedor</div>${rank}</div>
      </div>`;
   if(admCharts.cc){ admCharts.cc.destroy(); }
   const ctx=document.getElementById('adm-ch-cc');
-  if(ctx && ccLabels.length){ admCharts.cc=new Chart(ctx,{type:'doughnut',data:{labels:ccLabels,datasets:[{data:ccVals,backgroundColor:['#1a56a0','#5bbfbc','#e0a32e','#c0504d','#7a9e3f','#8d6cab','#3f9e8e','#b5651d']}]},options:{plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},maintainAspectRatio:false}}); }
-  else if(ctx){ ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem gastos lançados ainda.</p>'; }
+  if(ctx && depLabels.length){ admCharts.cc=new Chart(ctx,{type:'doughnut',data:{labels:depLabels,datasets:[{data:depVals,backgroundColor:['#1a56a0','#5bbfbc','#e0a32e','#c0504d','#7a9e3f','#8d6cab','#3f9e8e','#b5651d']}]},options:{plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},maintainAspectRatio:false}}); }
+  else if(ctx){ ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem cotações lançadas ainda.</p>'; }
 }
 
 /* ===================== COTAÇÕES ===================== */
@@ -3594,8 +3592,7 @@ function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
   admSetVal('admcot-solic',c?c.solicitante:''); admSetVal('admcot-qtd',c?c.quantidade:'');
   admSetVal('admcot-vini',c?c.valor_inicial:''); admSetVal('admcot-vfin',c?c.valor_final:'');
   admSetVal('admcot-data',c?c.data:''); admSetVal('admcot-dataf',c?c.data_final:'');
-  document.getElementById('admcot-forn').innerHTML=admFornOptions(c?c.fornecedor:'');
-  document.getElementById('admcot-cc').innerHTML=admCCOptions(c?c.centro_custo:''); admOpen('modal-admcot'); }
+  admSetVal('admcot-forn',c?c.fornecedor:''); admSetVal('admcot-cc',c?c.centro_custo:''); admOpen('modal-admcot'); }
 async function admSalvarCot(){ const item=admVal('admcot-item'); if(!item){toast('Informe o item.',true);return;}
   const rec={item,descricao:admVal('admcot-desc')||null,fornecedor:admVal('admcot-forn')||null,solicitante:admVal('admcot-solic')||null,centro_custo:admVal('admcot-cc')||null,quantidade:admNum(admVal('admcot-qtd'))||null,valor_inicial:admNum(admVal('admcot-vini'))||null,valor_final:admNum(admVal('admcot-vfin'))||null,data:admVal('admcot-data')||null,data_final:admVal('admcot-dataf')||null};
   const id=admVal('admcot-id');
