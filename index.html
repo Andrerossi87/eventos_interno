@@ -732,7 +732,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
       <div class="fg"><label>Data de início *</label><input id="mev-ini" type="date" onchange="autoAno()"/></div>
       <div class="fg"><label>Data de encerramento *</label><input id="mev-fim" type="date"/></div>
     </div>
-    <div class="fg form-row"><label>Orçamento do evento (R$) — valor bruto</label><input id="mev-orcado" inputmode="decimal" placeholder="0,00"/></div>
+    <div class="fg form-row"><label>Orçamento do evento (R$) — valor bruto</label><input id="mev-orcado" inputmode="decimal" placeholder="0,00" oninput="admMoeda(this)"/></div>
     <div class="fg form-row"><label>Observações</label><textarea id="mev-obs" placeholder="Notas..."></textarea></div>
     <input type="hidden" id="mev-id"/>
     <div class="modal-actions">
@@ -903,12 +903,12 @@ tr.item-pendente:hover td{background:#fff5dc;}
   <div class="modal-hd"><h3 id="admcot-title">Nova cotação</h3><button class="modal-close" onclick="closeModal('modal-admcot')">×</button></div>
   <input type="hidden" id="admcot-id"/>
   <div class="fg form-row"><label>Evento</label><input id="admcot-eventonome" readonly style="background:var(--surface2)"/><input type="hidden" id="admcot-evento"/></div>
-  <div class="fg form-row"><label>Item / serviço *</label><input id="admcot-item" placeholder="Ex: Monitores, Locação de salas"/></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:160px"><label>Fornecedor</label><input id="admcot-forn" placeholder="Nome do fornecedor"/></div><div class="fg" style="flex:1;min-width:140px"><label>Departamento / centro de custo</label><input id="admcot-cc" placeholder="Ex: TECH, Compras, MKT"/></div></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Solicitante</label><input id="admcot-solic"/></div><div class="fg" style="flex:1;min-width:100px"><label>Quantidade</label><input id="admcot-qtd" inputmode="decimal"/></div></div>
-  <div class="fg form-row"><label>Valor cotado (R$)</label><input id="admcot-vfin" inputmode="decimal" placeholder="0,00"/></div>
+  <div class="fg form-row"><label>Item / serviço *</label><input id="admcot-item" class="upper-input" placeholder="Ex: Monitores, Locação de salas"/></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:160px"><label>Fornecedor</label><input id="admcot-forn" class="upper-input" placeholder="Nome do fornecedor"/></div><div class="fg" style="flex:1;min-width:140px"><label>Departamento / centro de custo</label><input id="admcot-cc" class="upper-input" placeholder="Ex: TECH, Compras, MKT"/></div></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Solicitante</label><input id="admcot-solic" class="upper-input"/></div><div class="fg" style="flex:1;min-width:100px"><label>Quantidade</label><input id="admcot-qtd" inputmode="decimal"/></div></div>
+  <div class="fg form-row"><label>Valor cotado (R$)</label><input id="admcot-vfin" inputmode="decimal" placeholder="0,00" oninput="admMoeda(this)"/></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Data inicial</label><input id="admcot-data" type="date"/></div><div class="fg" style="flex:1;min-width:140px"><label>Data final</label><input id="admcot-dataf" type="date"/></div></div>
-  <div class="fg form-row"><label>Observações</label><input id="admcot-desc"/></div>
+  <div class="fg form-row"><label>Observações</label><input id="admcot-desc" class="upper-input"/></div>
   <div class="modal-actions"><button class="btn btn-primary" onclick="admSalvarCot()">Salvar</button><button class="btn btn-ghost" onclick="closeModal('modal-admcot')">Cancelar</button></div>
 </div></div>
 
@@ -3436,6 +3436,7 @@ function admNum(v){ if(v==null||v==='') return 0; if(typeof v==='number') return
 function admOpen(id){ const e=document.getElementById(id); if(e) e.classList.add('open'); }
 function admVal(id){ const e=document.getElementById(id); return e?e.value.trim():''; }
 function admSetVal(id,v){ const e=document.getElementById(id); if(e) e.value=(v==null?'':v); }
+function admMoeda(input){ let raw=String(input.value).replace(/[^0-9]/g,''); if(!raw){input.value='';return;} input.value=(parseInt(raw,10)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
 /* ---------- contexto / navegação ---------- */
 function setContexto(ctx){
@@ -3563,7 +3564,7 @@ function eventOrcadoAdm(id){ if(!id) return 0; const arr=(typeof EVENTOS!=='unde
 function renderAdmCotacoes(){
   const el=document.getElementById('page-adm-cotacoes'); if(!el) return;
   const temEvento=!!admCotFEvento;
-  const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button><button class="btn btn-primary" ${temEvento?'':'disabled style="opacity:.5;cursor:not-allowed"'} onclick="admOpenCot()">+ Nova cotação</button>`;
+  const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button><button class="btn btn-primary" onclick="admOpenCot()">+ Nova cotação</button>`;
   let filt=ADM_COT.slice();
   if(admCotFEvento) filt=filt.filter(c=>c.evento_id===admCotFEvento);
   if(admCotFItem) filt=filt.filter(c=>(c.item||'').toLowerCase().includes(admCotFItem.toLowerCase()));
@@ -3622,8 +3623,8 @@ function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
   admSetVal('admcot-forn',c?c.fornecedor:''); admSetVal('admcot-solic',c?c.solicitante:''); admSetVal('admcot-cc',c?c.centro_custo:'');
   admSetVal('admcot-qtd',c?c.quantidade:''); admSetVal('admcot-vfin',c?c.valor_final:'');
   admSetVal('admcot-data',c?c.data:''); admSetVal('admcot-dataf',c?c.data_final:''); admOpen('modal-admcot'); }
-async function admSalvarCot(){ const item=admVal('admcot-item'); if(!item){toast('Informe o item.',true);return;}
-  const rec={item,evento_id:admVal('admcot-evento')||null,descricao:admVal('admcot-desc')||null,fornecedor:admVal('admcot-forn')||null,solicitante:admVal('admcot-solic')||null,centro_custo:admVal('admcot-cc')||null,quantidade:admNum(admVal('admcot-qtd'))||null,valor_final:admNum(admVal('admcot-vfin'))||null,data:admVal('admcot-data')||null,data_final:admVal('admcot-dataf')||null};
+async function admSalvarCot(){ const item=admVal('admcot-item').toUpperCase(); if(!item){toast('Informe o item.',true);return;}
+  const rec={item,evento_id:admVal('admcot-evento')||null,descricao:(admVal('admcot-desc')||'').toUpperCase()||null,fornecedor:(admVal('admcot-forn')||'').toUpperCase()||null,solicitante:(admVal('admcot-solic')||'').toUpperCase()||null,centro_custo:(admVal('admcot-cc')||'').toUpperCase()||null,quantidade:admNum(admVal('admcot-qtd'))||null,valor_final:admNum(admVal('admcot-vfin'))||null,data:admVal('admcot-data')||null,data_final:admVal('admcot-dataf')||null};
   const id=admVal('admcot-id');
   const r=id?await sbQuery(()=>sb.from('adm_cotacoes').update(rec).eq('id',id)):await sbQuery(()=>sb.from('adm_cotacoes').insert(rec));
   if(r.error){toast('Erro ao salvar.',true);return;} closeModal('modal-admcot'); toast('Cotação salva!'); await admRefresh(); }
@@ -3748,6 +3749,7 @@ async function admImportConfirm(){
       toast(`${recs.length} gasto(s) importado(s)!`);
     } else {
       const recs=admImportRows.map(r=>{ const vi=admNum(admPick(r,['valor inicial','valorinicial','orcado','orçado'])); const vf=admNum(admPick(r,['valor final','valorfinal','valor','preco','preço'])); return {item:String(admPick(r,['descrição item','descricaoitem','item','produto','servico'])||'').trim()||'(sem item)',descricao:String(admPick(r,['observacoes','obsevações','obs','descricao'])||'').trim()||null,fornecedor:String(admPick(r,['fornecedor'])||'').trim()||null,solicitante:String(admPick(r,['solicitante'])||'').trim()||null,centro_custo:String(admPick(r,['departamento','centro_custo','centro de custo','cc'])||'').trim()||null,quantidade:admNum(admPick(r,['quantidade','qtd']))||null,valor_inicial:vi||null,valor_final:vf||null,data:admParseData(admPick(r,['data inicial','datainicial','data'])),data_final:admParseData(admPick(r,['data final','datafinal']))}; });
+      recs.forEach(x=>['item','descricao','fornecedor','solicitante','centro_custo'].forEach(k=>{ if(x[k]) x[k]=String(x[k]).toUpperCase(); }));
       const r=await sbQuery(()=>sb.from('adm_cotacoes').insert(recs)); if(r.error) throw r.error;
       toast(`${recs.length} cotação(ões) importada(s)!`);
     }
