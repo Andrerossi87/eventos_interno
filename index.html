@@ -377,7 +377,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
     </nav>
 <nav class="nav" id="nav-grp-adm" style="display:none">
   <div class="nav-sec">Administrativo</div>
-  <button class="nav-item active" id="navadm-visao" onclick="goAdm('visao',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Visão geral</button>
+  <button class="nav-item active" id="navadm-visao" onclick="goAdm('visao',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Status</button>
   <button class="nav-item" id="navadm-cotacoes" onclick="goAdm('cotacoes',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Cotações</button>
 </nav>
     <div class="sb-footer">
@@ -3492,7 +3492,30 @@ function admFornOptions(sel){ return `<option value="">— selecione —</option
 /* ao escolher fornecedor, preenche o centro de custo dele */
 function admAutoCC(fornSelId,ccSelId){ const fn=document.getElementById(fornSelId).value; const f=ADM_FORN.find(x=>x.nome===fn); const ccEl=document.getElementById(ccSelId); if(f&&f.centro_custo&&ccEl){ ccEl.value=f.centro_custo; } }
 
-/* ===================== VISÃO GERAL ===================== */
+/* ===================== VISÃO GERAL (Status) ===================== */
+let admAgendaRef=new Date();
+function admAgendaPrev(){admAgendaRef=new Date(admAgendaRef.getFullYear(),admAgendaRef.getMonth()-1,1);renderAdmAgenda();}
+function admAgendaNext(){admAgendaRef=new Date(admAgendaRef.getFullYear(),admAgendaRef.getMonth()+1,1);renderAdmAgenda();}
+function admAgendaHoje(){admAgendaRef=new Date();renderAdmAgenda();}
+function renderAdmAgenda(){
+  const grid=document.getElementById('adm-agenda-grid'); const lbl=document.getElementById('adm-agenda-mes-label'); if(!grid) return;
+  const Y=admAgendaRef.getFullYear(), M=admAgendaRef.getMonth();
+  const nomesMes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  if(lbl) lbl.textContent=`${nomesMes[M]} ${Y}`;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const primeiro=new Date(Y,M,1); const inicioGrade=new Date(Y,M,1-primeiro.getDay());
+  const parse=v=>v?new Date(v+'T00:00:00'):null;
+  const noDia=d=>ADM_COT.filter(c=>{ const i=parse(c.data); if(!i) return false; const f=parse(c.data_final)||i; const dd=new Date(d); dd.setHours(0,0,0,0); i.setHours(0,0,0,0); f.setHours(0,0,0,0); return dd>=i && dd<=f; });
+  const semanas=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  let html='<table class="agenda-table"><thead><tr>'+semanas.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>';
+  for(let w=0;w<6;w++){ const linha=[]; for(let k=0;k<7;k++){const d=new Date(inicioGrade); d.setDate(inicioGrade.getDate()+w*7+k); linha.push(d);} if(w>=4 && linha.every(d=>d.getMonth()!==M)) continue; html+='<tr>';
+    for(const d of linha){ const fora=d.getMonth()!==M; const dd=new Date(d); dd.setHours(0,0,0,0); const ehHoje=dd.getTime()===hoje.getTime(); const evs=noDia(d);
+      const pills=evs.slice(0,3).map(c=>{ const dFim=diasAte(c.data_final||c.data), dIni=diasAte(c.data); let cls='fut'; if(dFim!==null&&dFim<0)cls='done'; else if(dIni!==null&&dIni<=0&&dFim>=0)cls='run'; return `<div class="agenda-ev ${cls}" title="${admEsc(c.item)}">${admEsc(c.item)}</div>`; }).join('');
+      const mais=evs.length>3?`<div class="agenda-more">+${evs.length-3} mais</div>`:'';
+      html+=`<td class="agenda-cell ${fora?'out':''} ${ehHoje?'today':''}"><div class="agenda-daynum">${d.getDate()}</div>${pills}${mais}</td>`; }
+    html+='</tr>'; }
+  html+='</tbody></table>'; grid.innerHTML=html;
+}
 function renderAdmVisao(){
   const el=document.getElementById('page-adm-visao'); if(!el) return;
   const itens={}; ADM_COT.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
@@ -3503,25 +3526,33 @@ function renderAdmVisao(){
   const depLabels=Object.keys(porDep), depVals=depLabels.map(k=>porDep[k]);
   const ecoForn={}; ADM_COT.forEach(c=>{ const vi=admNum(c.valor_inicial),vf=admNum(c.valor_final); if(c.fornecedor&&vi>0&&vf>0&&vi>=vf) ecoForn[c.fornecedor]=(ecoForn[c.fornecedor]||0)+(vi-vf); });
   const fornRank=Object.entries(ecoForn).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const pend=ADM_COT.filter(c=>{ const its=itens[c.item||'(sem item)']; return its && !its.some(r=>r.selecionado); });
   const kpis=[
-    {l:'Orçado',v:fmtBR(orcado),c:'amber',s:'valor inicial'},
-    {l:'Cotação',v:fmtBR(cotacao),c:'blue',s:'melhor preço'},
-    {l:'Realizado',v:fmtBR(realizado),c:'green',s:'selecionado'},
+    {l:'Cotações',v:ADM_COT.length,c:'',s:'registradas'},
+    {l:'Aguardando seleção',v:new Set(pend.map(c=>c.item)).size,c:'amber',s:'itens sem fornecedor'},
+    {l:'Orçado',v:fmtBR(orcado),c:'blue',s:'valor inicial'},
+    {l:'Realizado',v:fmtBR(realizado),c:'red',s:'selecionado'},
     {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'negociação'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   let rank;
   if(fornRank.length){ const maxv=fornRank[0][1]||1; rank=fornRank.map(([n,v])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${admEsc(n)}</span><span style="font-family:'DM Mono',monospace;color:var(--green)">${fmtBR(v)}</span></div><div style="height:6px;background:var(--surface2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(v/maxv*100).toFixed(0)}%;background:var(--green)"></div></div></div>`).join(''); }
   else rank='<p style="font-size:12px;color:var(--text3)">Sem economia registrada ainda.</p>';
-  el.innerHTML=admHead('Visão geral','Resumo das cotações')+
-    `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>
-     <div style="display:flex;flex-wrap:wrap;gap:14px">
+  el.innerHTML=admHead('Status','Visão geral das cotações em tempo real')+
+    `<div class="metrics-grid" style="margin-bottom:12px">${kpis}</div>
+     <div id="adm-alertas" style="margin-bottom:12px"></div>
+     <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de cotações</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>
+     <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px">
        <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por departamento</div><div style="height:260px"><canvas id="adm-ch-cc"></canvas></div></div>
        <div class="card" style="flex:1;min-width:300px"><div class="card-title">Economia por fornecedor</div>${rank}</div>
      </div>`;
+  // alertas (cotações com data e prazo até 30 dias)
+  const als=ADM_COT.map(c=>{ if(!c.data) return null; const al=alertaInfo(c.data,c.data_final||c.data); return al?{c,al}:null; }).filter(x=>x&&x.al.dias>=0&&x.al.dias<=30).sort((a,b)=>a.al.dias-b.al.dias);
+  const ael=document.getElementById('adm-alertas'); if(ael) ael.innerHTML=als.map(x=>`<div class="al ${x.al.cls}"><span class="al-icon">${x.al.icon}</span><div><strong>${admEsc(x.c.item)}</strong>${x.c.fornecedor?' · '+admEsc(x.c.fornecedor):''} — ${x.al.txt}</div></div>`).join('');
+  renderAdmAgenda();
   if(admCharts.cc){ admCharts.cc.destroy(); }
   const ctx=document.getElementById('adm-ch-cc');
   if(ctx && depLabels.length){ admCharts.cc=new Chart(ctx,{type:'doughnut',data:{labels:depLabels,datasets:[{data:depVals,backgroundColor:['#1a56a0','#5bbfbc','#e0a32e','#c0504d','#7a9e3f','#8d6cab','#3f9e8e','#b5651d']}]},options:{plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},maintainAspectRatio:false}}); }
-  else if(ctx){ ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem cotações lançadas ainda.</p>'; }
+  else if(ctx){ ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem cotações com valor ainda.</p>'; }
 }
 
 /* ===================== COTAÇÕES ===================== */
