@@ -378,6 +378,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
 <nav class="nav" id="nav-grp-adm" style="display:none">
   <div class="nav-sec">Administrativo</div>
   <button class="nav-item active" id="navadm-visao" onclick="goAdm('visao',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Status</button>
+  <button class="nav-item" id="navadm-eventos" onclick="goAdm('eventos',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="12" rx="1.5"/><line x1="5" y1="1" x2="5" y2="5"/><line x1="11" y1="1" x2="11" y2="5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>Eventos</button>
   <button class="nav-item" id="navadm-cotacoes" onclick="goAdm('cotacoes',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Cotações</button>
 </nav>
     <div class="sb-footer">
@@ -713,6 +714,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
 
       <div class="page" id="page-adm-visao"></div>
     <div class="page" id="page-adm-cotacoes"></div>
+    <div class="page" id="page-adm-eventos"></div>
     <div class="page" id="page-adm-gastos"></div>
     <div class="page" id="page-adm-forn"></div>
     <div class="page" id="page-adm-cc"></div>
@@ -1143,6 +1145,7 @@ function goPage(id,btn){
   renderPage(id);
 }
 function renderPage(id){
+  if(id&&id.indexOf('adm-')===0){ if(typeof renderAdmPage==='function') renderAdmPage(id.slice(4)); return; }
   if(id==='dashboard') renderDashboard();
   else if(id==='graficos') renderGraficos();
   else if(id==='eventos') renderEventos();
@@ -3468,6 +3471,7 @@ function renderAdmPage(id){
   else if(id==='gastos') renderAdmGastos();
   else if(id==='forn') renderAdmForn();
   else if(id==='cc') renderAdmCC();
+  else if(id==='eventos') renderAdmEventos();
 }
 async function admEnsure(){ if(!admLoaded){ await carregarADM(); admLoaded=true; } }
 async function carregarADM(){
@@ -3509,12 +3513,12 @@ function renderAdmAgenda(){
   const hoje=new Date(); hoje.setHours(0,0,0,0);
   const primeiro=new Date(Y,M,1); const inicioGrade=new Date(Y,M,1-primeiro.getDay());
   const parse=v=>v?new Date(v+'T00:00:00'):null;
-  const noDia=d=>ADM_COT.filter(c=>{ const i=parse(c.data); if(!i) return false; const f=parse(c.data_final)||i; const dd=new Date(d); dd.setHours(0,0,0,0); i.setHours(0,0,0,0); f.setHours(0,0,0,0); return dd>=i && dd<=f; });
+  const noDia=d=>((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).filter(e=>{ const i=parse(e.data_ini); if(!i) return false; const f=parse(e.data_fim)||i; const dd=new Date(d); dd.setHours(0,0,0,0); i.setHours(0,0,0,0); f.setHours(0,0,0,0); return dd>=i && dd<=f; });
   const semanas=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   let html='<table class="agenda-table"><thead><tr>'+semanas.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>';
   for(let w=0;w<6;w++){ const linha=[]; for(let k=0;k<7;k++){const d=new Date(inicioGrade); d.setDate(inicioGrade.getDate()+w*7+k); linha.push(d);} if(w>=4 && linha.every(d=>d.getMonth()!==M)) continue; html+='<tr>';
     for(const d of linha){ const fora=d.getMonth()!==M; const dd=new Date(d); dd.setHours(0,0,0,0); const ehHoje=dd.getTime()===hoje.getTime(); const evs=noDia(d);
-      const pills=evs.slice(0,3).map(c=>{ const dFim=diasAte(c.data_final||c.data), dIni=diasAte(c.data); let cls='fut'; if(dFim!==null&&dFim<0)cls='done'; else if(dIni!==null&&dIni<=0&&dFim>=0)cls='run'; return `<div class="agenda-ev ${cls}" title="${admEsc(c.item)}">${admEsc(c.item)}</div>`; }).join('');
+      const pills=evs.slice(0,3).map(e=>{ const dFim=diasAte(e.data_fim||e.data_ini), dIni=diasAte(e.data_ini); let cls='fut'; if(dFim!==null&&dFim<0)cls='done'; else if(dIni!==null&&dIni<=0&&dFim>=0)cls='run'; return `<div class="agenda-ev ${cls}" title="${admEsc(e.nome)}">${admEsc(e.nome)}</div>`; }).join('');
       const mais=evs.length>3?`<div class="agenda-more">+${evs.length-3} mais</div>`:'';
       html+=`<td class="agenda-cell ${fora?'out':''} ${ehHoje?'today':''}"><div class="agenda-daynum">${d.getDate()}</div>${pills}${mais}</td>`; }
     html+='</tr>'; }
@@ -3543,14 +3547,14 @@ function renderAdmVisao(){
   el.innerHTML=admHead('Status','Visão geral das cotações em tempo real')+
     `<div class="metrics-grid" style="margin-bottom:12px">${kpis}</div>
      <div id="adm-alertas" style="margin-bottom:12px"></div>
-     <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de cotações</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>
+     <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de eventos</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>
      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px">
        <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por departamento</div><div style="height:260px"><canvas id="adm-ch-cc"></canvas></div></div>
        <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por fornecedor</div>${rank}</div>
      </div>`;
   // alertas (cotações com data e prazo até 30 dias)
-  const als=ADM_COT.map(c=>{ if(!c.data) return null; const al=alertaInfo(c.data,c.data_final||c.data); return al?{c,al}:null; }).filter(x=>x&&x.al.dias>=0&&x.al.dias<=30).sort((a,b)=>a.al.dias-b.al.dias);
-  const ael=document.getElementById('adm-alertas'); if(ael) ael.innerHTML=als.map(x=>`<div class="al ${x.al.cls}"><span class="al-icon">${x.al.icon}</span><div><strong>${admEsc(x.c.item)}</strong>${x.c.fornecedor?' · '+admEsc(x.c.fornecedor):''} — ${x.al.txt}</div></div>`).join('');
+  const als=((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).map(e=>{ const al=alertaInfo(e.data_ini,e.data_fim); return al?{e,al}:null; }).filter(x=>x&&x.al.dias>=0&&x.al.dias<=30).sort((a,b)=>a.al.dias-b.al.dias);
+  const ael=document.getElementById('adm-alertas'); if(ael) ael.innerHTML=als.map(x=>`<div class="al ${x.al.cls}"><span class="al-icon">${x.al.icon}</span><div><strong>${admEsc(x.e.nome)}</strong> — ${x.al.txt}</div></div>`).join('');
   renderAdmAgenda();
   if(admCharts.cc){ admCharts.cc.destroy(); }
   const ctx=document.getElementById('adm-ch-cc');
@@ -3710,6 +3714,20 @@ async function admSalvarCC(){ const nome=admVal('admcc-nome'); if(!nome){toast('
   const r=id?await sbQuery(()=>sb.from('adm_centros_custo').update(rec).eq('id',id)):await sbQuery(()=>sb.from('adm_centros_custo').insert(rec));
   if(r.error){toast('Erro ao salvar.',true);return;} closeModal('modal-admcc'); toast('Centro de custo salvo!'); await admRefresh(); }
 async function admDelCC(id){ if(!confirm('Excluir este centro de custo?'))return; await sbQuery(()=>sb.from('adm_centros_custo').delete().eq('id',id)); toast('Centro excluído.'); await admRefresh(); }
+
+/* ===================== EVENTOS (ADM) ===================== */
+function renderAdmEventos(){
+  const el=document.getElementById('page-adm-eventos'); if(!el) return;
+  const evs=(typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[];
+  const acoes=`<button class="btn btn-primary" onclick="abrirModalEvento()">+ Novo evento</button>`;
+  const linhas=evs.map(e=>`<tr style="border-bottom:1px solid var(--border)">
+    <td style="padding:8px 10px;font-size:12px;font-weight:600">${admEsc(e.nome)}</td>
+    <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${e.data_ini?admEsc(fmtDate(e.data_ini)):'—'} → ${e.data_fim?admEsc(fmtDate(e.data_fim)):'—'}</td>
+    <td style="padding:8px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px">${e.orcado!=null?fmtBR(admNum(e.orcado)):'—'}</td>
+    <td style="padding:8px 10px;text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="abrirModalEvento('${e.id}')">✎</button> <button class="btn btn-danger btn-sm" onclick="excluirEvento('${e.id}')">✕</button></td></tr>`).join('');
+  el.innerHTML=admHead('Eventos','Cadastre o evento e o valor do orçamento',acoes)+
+    `<div class="card">${evs.length?`<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border2)"><th style="text-align:left;padding:8px 10px;font-size:10px;color:var(--text2);text-transform:uppercase">Evento</th><th style="text-align:left;padding:8px 10px;font-size:10px;color:var(--text2);text-transform:uppercase">Período</th><th style="text-align:right;padding:8px 10px;font-size:10px;color:var(--text2);text-transform:uppercase">Orçamento</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhum evento. Clique em "+ Novo evento".</p>'}</div>`;
+}
 
 /* ===================== IMPORTAÇÃO ===================== */
 function admNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,''); }
