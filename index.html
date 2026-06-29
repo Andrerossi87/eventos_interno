@@ -732,6 +732,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
       <div class="fg"><label>Data de início *</label><input id="mev-ini" type="date" onchange="autoAno()"/></div>
       <div class="fg"><label>Data de encerramento *</label><input id="mev-fim" type="date"/></div>
     </div>
+    <div class="fg form-row"><label>Orçamento do evento (R$) — valor bruto</label><input id="mev-orcado" inputmode="decimal" placeholder="0,00"/></div>
     <div class="fg form-row"><label>Observações</label><textarea id="mev-obs" placeholder="Notas..."></textarea></div>
     <input type="hidden" id="mev-id"/>
     <div class="modal-actions">
@@ -901,10 +902,11 @@ tr.item-pendente:hover td{background:#fff5dc;}
 <div class="modal-bg" id="modal-admcot"><div class="modal">
   <div class="modal-hd"><h3 id="admcot-title">Nova cotação</h3><button class="modal-close" onclick="closeModal('modal-admcot')">×</button></div>
   <input type="hidden" id="admcot-id"/>
+  <div class="fg form-row"><label>Evento</label><input id="admcot-eventonome" readonly style="background:var(--surface2)"/><input type="hidden" id="admcot-evento"/></div>
   <div class="fg form-row"><label>Item / serviço *</label><input id="admcot-item" placeholder="Ex: Monitores, Locação de salas"/></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:160px"><label>Fornecedor</label><input id="admcot-forn" placeholder="Nome do fornecedor"/></div><div class="fg" style="flex:1;min-width:140px"><label>Departamento / centro de custo</label><input id="admcot-cc" placeholder="Ex: TECH, Compras, MKT"/></div></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Solicitante</label><input id="admcot-solic"/></div><div class="fg" style="flex:1;min-width:100px"><label>Quantidade</label><input id="admcot-qtd" inputmode="decimal"/></div></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Valor inicial (orçado)</label><input id="admcot-vini" inputmode="decimal" placeholder="0,00"/></div><div class="fg" style="flex:1;min-width:140px"><label>Valor final (cotado)</label><input id="admcot-vfin" inputmode="decimal" placeholder="0,00"/></div></div>
+  <div class="fg form-row"><label>Valor cotado (R$)</label><input id="admcot-vfin" inputmode="decimal" placeholder="0,00"/></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap" class="form-row"><div class="fg" style="flex:1;min-width:140px"><label>Data inicial</label><input id="admcot-data" type="date"/></div><div class="fg" style="flex:1;min-width:140px"><label>Data final</label><input id="admcot-dataf" type="date"/></div></div>
   <div class="fg form-row"><label>Observações</label><input id="admcot-desc"/></div>
   <div class="modal-actions"><button class="btn btn-primary" onclick="admSalvarCot()">Salvar</button><button class="btn btn-ghost" onclick="closeModal('modal-admcot')">Cancelar</button></div>
@@ -2123,7 +2125,7 @@ function renderGraficos(){
 
 // ── EVENTOS ──
 function abrirModalEvento(id){
-  ['mev-nome','mev-obs'].forEach(x=>document.getElementById(x).value='');
+  ['mev-nome','mev-obs','mev-orcado'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('mev-ano').value=new Date().getFullYear();
   ['mev-ini','mev-fim'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('mev-id').value='';
@@ -2135,6 +2137,7 @@ function abrirModalEvento(id){
       document.getElementById('mev-ini').value=ev.data_ini||'';
       document.getElementById('mev-fim').value=ev.data_fim||'';
       document.getElementById('mev-obs').value=ev.obs||'';
+      document.getElementById('mev-orcado').value=ev.orcado!=null?ev.orcado:'';
       document.getElementById('mev-ano').value=ev.ano||new Date(ev.data_ini+'T00:00:00').getFullYear();
       document.getElementById('mev-id').value=id;
       document.getElementById('mev-title').textContent='Editar evento';
@@ -2153,7 +2156,7 @@ async function salvarEvento(){
   }
   const editId=document.getElementById('mev-id').value;
   const ano=parseInt(document.getElementById('mev-ano').value)||new Date(ini+'T00:00:00').getFullYear();
-  const payload={nome,ano,data_ini:ini,data_fim:fim,obs:document.getElementById('mev-obs').value,user_id:USER.id,user_nome:PERFIL.nome||USER.email};
+  const payload={nome,ano,data_ini:ini,data_fim:fim,obs:document.getElementById('mev-obs').value,orcado:parseCurrencyVal(document.getElementById('mev-orcado').value)||null,user_id:USER.id,user_nome:PERFIL.nome||USER.email};
   const btnEv=document.querySelector('#modal-ev .btn-primary');
   if(btnEv){btnEv.disabled=true;btnEv.innerHTML='<span class="spinner"></span> Salvando...';}
   const resEv = await sbQuery(()=> editId
@@ -3424,7 +3427,7 @@ let APP_CTX='eventos';
 let ADM_CC=[], ADM_FORN=[], ADM_COT=[], ADM_GASTOS=[];
 let admLoaded=false; const admCharts={};
 let admImportTipo=null, admImportRows=[];
-let admCotFItem='', admCotFForn='';
+let admCotFEvento='', admCotFItem='', admCotFForn='';
 let admGastoFiltroCC='';
 
 function admEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -3519,19 +3522,18 @@ function renderAdmAgenda(){
 function renderAdmVisao(){
   const el=document.getElementById('page-adm-visao'); if(!el) return;
   const itens={}; ADM_COT.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
-  let orcado=0,cotacao=0,realizado=0;
-  Object.values(itens).forEach(rows=>{ const vis=rows.map(r=>admNum(r.valor_inicial)).filter(v=>v>0); const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); orcado+=vis.length?Math.max(...vis):0; cotacao+=vfs.length?Math.min(...vfs):0; const sel=rows.find(r=>r.selecionado); if(sel) realizado+=admNum(sel.valor_final); });
-  const economia=(realizado>0?orcado-realizado:orcado-cotacao);
+  let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; });
+  let orcado=0; [...new Set(ADM_COT.map(c=>c.evento_id).filter(Boolean))].forEach(id=>orcado+=eventOrcadoAdm(id));
+  const economia=orcado-cotacao;
   const porDep={}; ADM_COT.forEach(c=>{ const k=c.centro_custo||'Sem centro'; const vf=admNum(c.valor_final); if(vf>0) porDep[k]=(porDep[k]||0)+vf; });
   const depLabels=Object.keys(porDep), depVals=depLabels.map(k=>porDep[k]);
-  const ecoForn={}; ADM_COT.forEach(c=>{ const vi=admNum(c.valor_inicial),vf=admNum(c.valor_final); if(c.fornecedor&&vi>0&&vf>0&&vi>=vf) ecoForn[c.fornecedor]=(ecoForn[c.fornecedor]||0)+(vi-vf); });
-  const fornRank=Object.entries(ecoForn).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  const pend=ADM_COT.filter(c=>{ const its=itens[c.item||'(sem item)']; return its && !its.some(r=>r.selecionado); });
+  const totForn={}; ADM_COT.forEach(c=>{ const vf=admNum(c.valor_final); if(c.fornecedor&&vf>0) totForn[c.fornecedor]=(totForn[c.fornecedor]||0)+vf; });
+  const fornRank=Object.entries(totForn).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const kpis=[
     {l:'Cotações',v:ADM_COT.length,c:'',s:'registradas'},
-    {l:'Aguardando seleção',v:new Set(pend.map(c=>c.item)).size,c:'amber',s:'itens sem fornecedor'},
-    {l:'Orçado',v:fmtBR(orcado),c:'blue',s:'valor inicial'},
-    {l:'Realizado',v:fmtBR(realizado),c:'red',s:'selecionado'},
+    {l:'Itens',v:Object.keys(itens).length,c:'blue',s:'cotados'},
+    {l:'Orçado',v:fmtBR(orcado),c:'amber',s:'valor inicial'},
+    {l:'Cotação',v:fmtBR(cotacao),c:'blue',s:'melhor preço'},
     {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'negociação'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   let rank;
@@ -3543,7 +3545,7 @@ function renderAdmVisao(){
      <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de cotações</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>
      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px">
        <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por departamento</div><div style="height:260px"><canvas id="adm-ch-cc"></canvas></div></div>
-       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Economia por fornecedor</div>${rank}</div>
+       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por fornecedor</div>${rank}</div>
      </div>`;
   // alertas (cotações com data e prazo até 30 dias)
   const als=ADM_COT.map(c=>{ if(!c.data) return null; const al=alertaInfo(c.data,c.data_final||c.data); return al?{c,al}:null; }).filter(x=>x&&x.al.dias>=0&&x.al.dias<=30).sort((a,b)=>a.al.dias-b.al.dias);
@@ -3556,90 +3558,78 @@ function renderAdmVisao(){
 }
 
 /* ===================== COTAÇÕES ===================== */
+function eventNomeAdm(id){ if(!id) return ''; const arr=(typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]; const e=arr.find(x=>x.id===id); return e?e.nome:''; }
+function eventOrcadoAdm(id){ if(!id) return 0; const arr=(typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]; const e=arr.find(x=>x.id===id); return e?admNum(e.orcado):0; }
 function renderAdmCotacoes(){
   const el=document.getElementById('page-adm-cotacoes'); if(!el) return;
-  const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button><button ${admBtnP} onclick="admOpenCot()">+ Nova cotação</button>`;
-  // filtros
+  const temEvento=!!admCotFEvento;
+  const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button><button class="btn btn-primary" ${temEvento?'':'disabled style="opacity:.5;cursor:not-allowed"'} onclick="admOpenCot()">+ Nova cotação</button>`;
   let filt=ADM_COT.slice();
+  if(admCotFEvento) filt=filt.filter(c=>c.evento_id===admCotFEvento);
   if(admCotFItem) filt=filt.filter(c=>(c.item||'').toLowerCase().includes(admCotFItem.toLowerCase()));
   if(admCotFForn) filt=filt.filter(c=>(c.fornecedor||'')===admCotFForn);
-  // KPIs por item distinto
   const itens={}; filt.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
-  let orcado=0,cotacao=0,realizado=0;
-  Object.values(itens).forEach(rows=>{
-    const vis=rows.map(r=>admNum(r.valor_inicial)).filter(v=>v>0);
-    const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0);
-    orcado+=vis.length?Math.max(...vis):0;
-    cotacao+=vfs.length?Math.min(...vfs):0;
-    const sel=rows.find(r=>r.selecionado); if(sel) realizado+=admNum(sel.valor_final);
-  });
-  const economia=(realizado>0?orcado-realizado:orcado-cotacao);
+  let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; });
+  let orcado=0;
+  if(admCotFEvento){ orcado=eventOrcadoAdm(admCotFEvento); }
+  else { [...new Set(filt.map(c=>c.evento_id).filter(Boolean))].forEach(id=>orcado+=eventOrcadoAdm(id)); }
+  const economia=orcado-cotacao;
   const kpis=[
-    {l:'Orçado (valor inicial)',v:fmtBR(orcado),c:'amber',s:'referência'},
+    {l:'Itens cotados',v:Object.keys(itens).length,c:'',s:'no filtro'},
+    {l:'Orçado (evento)',v:fmtBR(orcado),c:'amber',s:'valor bruto'},
     {l:'Cotação (melhor preço)',v:fmtBR(cotacao),c:'blue',s:'menor por item'},
-    {l:'Realizado (selecionado)',v:fmtBR(realizado),c:'green',s:'fornecedor escolhido'},
-    {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:realizado>0?'orçado − realizado':'orçado − cotação'},
+    {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'orçado − cotação'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
-  // melhor por item p/ destaque
   const bestItem={}; Object.entries(itens).forEach(([k,rows])=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); bestItem[k]=vfs.length?Math.min(...vfs):null; });
-  // filtros UI
-  const fornOpts=`<option value="">Todos os fornecedores</option>`+[...new Set(ADM_COT.map(c=>c.fornecedor).filter(Boolean))].sort().map(f=>`<option ${f===admCotFForn?'selected':''}>${admEsc(f)}</option>`).join('');
+  const evOpts='<option value="">Todos os eventos</option>'+((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).map(e=>`<option value="${e.id}" ${e.id===admCotFEvento?'selected':''}>${admEsc(e.nome)}</option>`).join('');
+  const fornOpts='<option value="">Todos os fornecedores</option>'+[...new Set(ADM_COT.map(c=>c.fornecedor).filter(Boolean))].sort().map(f=>`<option ${f===admCotFForn?'selected':''}>${admEsc(f)}</option>`).join('');
   const filtros=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <input value="${admEsc(admCotFItem)}" oninput="admCotFItem=this.value;renderAdmCotacoes()" placeholder="Buscar por item..." style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/>
-    <select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>`;
-  // tabela ordenada por item, depois valor_final
+    <select onchange="admCotFEvento=this.value;renderAdmCotacoes()" style="min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${evOpts}</select>
+    <input value="${admEsc(admCotFItem)}" oninput="admCotFItem=this.value;renderAdmCotacoes()" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/>
+    <select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>
+    ${temEvento?'':'<p style="font-size:11px;color:var(--amber);margin:0 0 8px">Selecione um evento acima para poder cadastrar uma nova cotação.</p>'}`;
   filt.sort((a,b)=>{ const ia=(a.item||'').localeCompare(b.item||''); if(ia) return ia; return admNum(a.valor_final)-admNum(b.valor_final); });
-  const linhas=filt.map(c=>{
-    const vf=admNum(c.valor_final), vi=admNum(c.valor_inicial);
-    const best=bestItem[c.item||'(sem item)']; const isBest=best!=null&&vf>0&&vf===best;
-    const eco=(vi>0&&vf>0&&vi>=vf)?vi-vf:0;
-    return `<tr style="border-bottom:1px solid var(--border);${c.selecionado?'background:var(--green-bg)':''}">
+  const linhas=filt.map(c=>{ const vf=admNum(c.valor_final); const best=bestItem[c.item||'(sem item)']; const isBest=best!=null&&vf>0&&vf===best; const evn=eventNomeAdm(c.evento_id);
+    return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:7px 9px;font-size:12px;font-weight:600">${admEsc(c.item)}</td>
-      <td style="padding:7px 9px;font-size:12px">${admEsc(c.fornecedor||'—')} ${isBest&&!c.selecionado?'<span style=\"font-size:9px;background:#d6efe0;color:var(--green);padding:1px 6px;border-radius:10px\">menor</span>':''} ${c.selecionado?'<span style=\"font-size:9px;background:var(--green);color:#fff;padding:1px 6px;border-radius:10px\">selecionado</span>':''}</td>
+      <td style="padding:7px 9px;font-size:11px;color:var(--text2)">${admEsc(evn||'—')}</td>
+      <td style="padding:7px 9px;font-size:12px">${admEsc(c.fornecedor||'—')} ${isBest?'<span style="font-size:9px;background:#d6efe0;color:var(--green);padding:1px 6px;border-radius:10px">menor</span>':''}</td>
       <td style="padding:7px 9px;font-size:11px;color:var(--text2)">${admEsc(c.centro_custo||'—')}</td>
-      <td style="padding:7px 9px;text-align:right;font-size:12px;font-family:'DM Mono',monospace;color:var(--text3)">${vi>0?fmtBR(vi):'—'}</td>
       <td style="padding:7px 9px;text-align:right;font-size:12px;font-family:'DM Mono',monospace;${isBest?'color:var(--green);font-weight:700':''}">${vf>0?fmtBR(vf):'—'}</td>
-      <td style="padding:7px 9px;text-align:right;font-size:11px;font-family:'DM Mono',monospace;color:var(--green)">${eco>0?fmtBR(eco):'—'}</td>
       <td style="padding:7px 9px;text-align:right;white-space:nowrap">
-        ${c.selecionado?'':`<button class="btn btn-ghost btn-sm" title="Selecionar este fornecedor" onclick="admSelecionarCot('${c.id}')">Selecionar</button>`}
         <button class="btn btn-ghost btn-sm" title="Duplicar (cotar outro fornecedor)" onclick="admDuplicarCot('${c.id}')">⧉</button>
         <button class="btn btn-ghost btn-sm" onclick="admOpenCot('${c.id}')">✎</button>
         <button class="btn btn-danger btn-sm" onclick="admDelCot('${c.id}')">✕</button>
-      </td></tr>`;
-  }).join('');
+      </td></tr>`; }).join('');
   const tabela=filt.length?`<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border2)">
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Item</th>
+    <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Evento</th>
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Fornecedor</th>
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Centro custo</th>
-    <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Inicial</th>
-    <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Cotado</th>
-    <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Economia</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhuma cotação. Crie uma, duplique para cotar outro fornecedor, ou importe sua planilha.</p>';
-  el.innerHTML=admHead('Cotações','Compare fornecedores, selecione o melhor e acompanhe a economia',acoes)+
+    <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Valor cotado</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhuma cotação para o filtro. Selecione um evento e clique em "+ Nova cotação", ou importe sua planilha.</p>';
+  el.innerHTML=admHead('Cotações','Selecione o evento e compare os fornecedores por item',acoes)+
     `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div><div class="card">${filtros}${tabela}</div>`;
 }
 function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
+  if(!c && !admCotFEvento){ toast('Selecione um evento no filtro primeiro.',true); return; }
+  const evId=c?c.evento_id:admCotFEvento;
   document.getElementById('admcot-title').textContent=c?'Editar cotação':'Nova cotação';
-  admSetVal('admcot-id',c?c.id:''); admSetVal('admcot-item',c?c.item:''); admSetVal('admcot-desc',c?c.descricao:'');
-  admSetVal('admcot-solic',c?c.solicitante:''); admSetVal('admcot-qtd',c?c.quantidade:'');
-  admSetVal('admcot-vini',c?c.valor_inicial:''); admSetVal('admcot-vfin',c?c.valor_final:'');
-  admSetVal('admcot-data',c?c.data:''); admSetVal('admcot-dataf',c?c.data_final:'');
-  admSetVal('admcot-forn',c?c.fornecedor:''); admSetVal('admcot-cc',c?c.centro_custo:''); admOpen('modal-admcot'); }
+  admSetVal('admcot-id',c?c.id:''); admSetVal('admcot-evento',evId||''); admSetVal('admcot-eventonome',eventNomeAdm(evId)||'(sem evento)');
+  admSetVal('admcot-item',c?c.item:''); admSetVal('admcot-desc',c?c.descricao:'');
+  admSetVal('admcot-forn',c?c.fornecedor:''); admSetVal('admcot-solic',c?c.solicitante:''); admSetVal('admcot-cc',c?c.centro_custo:'');
+  admSetVal('admcot-qtd',c?c.quantidade:''); admSetVal('admcot-vfin',c?c.valor_final:'');
+  admSetVal('admcot-data',c?c.data:''); admSetVal('admcot-dataf',c?c.data_final:''); admOpen('modal-admcot'); }
 async function admSalvarCot(){ const item=admVal('admcot-item'); if(!item){toast('Informe o item.',true);return;}
-  const rec={item,descricao:admVal('admcot-desc')||null,fornecedor:admVal('admcot-forn')||null,solicitante:admVal('admcot-solic')||null,centro_custo:admVal('admcot-cc')||null,quantidade:admNum(admVal('admcot-qtd'))||null,valor_inicial:admNum(admVal('admcot-vini'))||null,valor_final:admNum(admVal('admcot-vfin'))||null,data:admVal('admcot-data')||null,data_final:admVal('admcot-dataf')||null};
+  const rec={item,evento_id:admVal('admcot-evento')||null,descricao:admVal('admcot-desc')||null,fornecedor:admVal('admcot-forn')||null,solicitante:admVal('admcot-solic')||null,centro_custo:admVal('admcot-cc')||null,quantidade:admNum(admVal('admcot-qtd'))||null,valor_final:admNum(admVal('admcot-vfin'))||null,data:admVal('admcot-data')||null,data_final:admVal('admcot-dataf')||null};
   const id=admVal('admcot-id');
   const r=id?await sbQuery(()=>sb.from('adm_cotacoes').update(rec).eq('id',id)):await sbQuery(()=>sb.from('adm_cotacoes').insert(rec));
   if(r.error){toast('Erro ao salvar.',true);return;} closeModal('modal-admcot'); toast('Cotação salva!'); await admRefresh(); }
 async function admDuplicarCot(id){ const c=ADM_COT.find(x=>x.id===id); if(!c) return;
-  const rec={item:c.item,descricao:c.descricao,fornecedor:c.fornecedor,solicitante:c.solicitante,centro_custo:c.centro_custo,quantidade:c.quantidade,valor_inicial:c.valor_inicial,valor_final:c.valor_final,data:c.data,data_final:c.data_final,selecionado:false};
+  const rec={item:c.item,evento_id:c.evento_id,descricao:c.descricao,fornecedor:c.fornecedor,solicitante:c.solicitante,centro_custo:c.centro_custo,quantidade:c.quantidade,valor_final:c.valor_final,data:c.data,data_final:c.data_final};
   const r=await sbQuery(()=>sb.from('adm_cotacoes').insert(rec).select());
   if(r.error){toast('Erro ao duplicar.',true);return;} toast('Duplicado! Edite o fornecedor e o valor.'); await admRefresh();
   const novo=r.data&&r.data[0]; if(novo) admOpenCot(novo.id); }
 async function admDelCot(id){ if(!confirm('Excluir esta cotação?'))return; await sbQuery(()=>sb.from('adm_cotacoes').delete().eq('id',id)); toast('Cotação excluída.'); await admRefresh(); }
-async function admSelecionarCot(id){ const c=ADM_COT.find(x=>x.id===id); if(!c) return;
-  // desmarca outros do mesmo item, marca este
-  await sbQuery(()=>sb.from('adm_cotacoes').update({selecionado:false}).eq('item',c.item));
-  await sbQuery(()=>sb.from('adm_cotacoes').update({selecionado:true}).eq('id',id));
-  toast('Fornecedor selecionado!'); await admRefresh(); }
 
 /* ===================== GASTOS ===================== */
 function renderAdmGastos(){
