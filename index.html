@@ -3607,8 +3607,11 @@ function renderAdmCotacoes(){
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Fornecedor</th>
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Centro custo</th>
     <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Valor cotado</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhuma cotação para o filtro. Selecione um evento e clique em "+ Nova cotação", ou importe sua planilha.</p>';
+  let recHtml='';
+  const recs=Object.entries(itens).map(([it,rows])=>{ const wv=rows.filter(r=>admNum(r.valor_final)>0); if(!wv.length) return null; const st=wv.slice().sort((a,b)=>admNum(a.valor_final)-admNum(b.valor_final)); const b0=st[0], w0=st[st.length-1]; return {it,forn:b0.fornecedor||'—',val:admNum(b0.valor_final),eco:admNum(w0.valor_final)-admNum(b0.valor_final),n:wv.length}; }).filter(Boolean);
+  if(recs.length){ recHtml=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--green)"><div class="card-title">\u{1F4A1} Melhor pre\u00e7o por item</div>`+recs.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px"><strong>${admEsc(r.it)}</strong> \u2192 <span style="color:var(--green);font-weight:600">${admEsc(r.forn)}</span> <span style="font-family:'DM Mono',monospace">${fmtBR(r.val)}</span> <span style="font-size:10px;color:var(--text3)">(${r.n} cota\u00e7\u00e3o${r.n!==1?'es':''})</span></div>${r.n>1&&r.eco>0?`<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:2px 8px;border-radius:10px">economia vs maior: ${fmtBR(r.eco)}</span>`:''}</div>`).join('')+`</div>`; }
   el.innerHTML=admHead('Cotações','Selecione o evento e compare os fornecedores por item',acoes)+
-    `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div><div class="card">${filtros}${tabela}</div>`;
+    `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>`+recHtml+`<div class="card">${filtros}${tabela}</div>`;
 }
 function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
   if(!c && !admCotFEvento){ toast('Selecione um evento no filtro primeiro.',true); return; }
