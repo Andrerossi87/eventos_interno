@@ -3608,13 +3608,14 @@ function renderAdmGraficos(){
     const escArr=evs.map(e=>{ const its={}; ADM_COT.filter(c=>c.evento_id===e.id).forEach(c=>{ const k=c.item||'x'; (its[k]=its[k]||[]).push(c); }); let t=0; Object.values(its).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); const best=vfs.length?Math.min(...vfs):0; const sel=rows.find(r=>r.selecionado); t+=sel?admNum(sel.valor_final):best; }); return t; });
     if(labels.length){ admCharts.linha=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Orçado',data:orcArr,backgroundColor:'#e0a32e',borderRadius:4,maxBarThickness:60},{label:'Cotação (melhor)',data:cotArr,backgroundColor:'#1a56a0',borderRadius:4,maxBarThickness:60},{label:'Escolhido',data:escArr,backgroundColor:'#2d6a1f',borderRadius:4,maxBarThickness:60}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'R$ '+Number(v).toLocaleString('pt-BR')}}}}}); }
     else { ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem eventos no filtro.</p>'; } }
+  const pieOpts={maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},generateLabels:(ch)=>{const d=ch.data,arr=d.datasets[0].data,tot=arr.reduce((a,b)=>a+(+b||0),0);return d.labels.map((l,i)=>{const v=+arr[i]||0,pct=tot?Math.round(v/tot*1000)/10:0,bg=d.datasets[0].backgroundColor[i];return{text:l+' ('+pct+'%)',fillStyle:bg,strokeStyle:bg,lineWidth:0,index:i};});}}},tooltip:{callbacks:{label:(ctx)=>{const arr=ctx.dataset.data,tot=arr.reduce((a,b)=>a+(+b||0),0),v=+ctx.parsed||0,pct=tot?Math.round(v/tot*1000)/10:0;return ' '+ctx.label+': '+fmtBR(v)+' ('+pct+'%)';}}}}};
   if(admCharts.pzcc){ admCharts.pzcc.destroy(); }
   const ccx=document.getElementById('adm-pz-cc');
-  if(ccx && ccLabels.length){ admCharts.pzcc=new Chart(ccx,{type:'doughnut',data:{labels:ccLabels,datasets:[{data:ccVals,backgroundColor:cores}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}}); }
+  if(ccx && ccLabels.length){ admCharts.pzcc=new Chart(ccx,{type:'doughnut',data:{labels:ccLabels,datasets:[{data:ccVals,backgroundColor:cores}]},options:pieOpts}); }
   else if(ccx){ ccx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem cotações com centro de custo.</p>'; }
   if(admCharts.pzor){ admCharts.pzor.destroy(); }
   const pz=document.getElementById('adm-pz-or');
-  if(pz && (K.orcado||K.cotacao)){ admCharts.pzor=new Chart(pz,{type:'doughnut',data:{labels:['Orçado','Cotação'],datasets:[{data:[K.orcado,K.cotacao],backgroundColor:['#e0a32e','#1a56a0']}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}}); }
+  if(pz && (K.orcado||K.cotacao)){ admCharts.pzor=new Chart(pz,{type:'doughnut',data:{labels:['Orçado','Cotação'],datasets:[{data:[K.orcado,K.cotacao],backgroundColor:['#e0a32e','#1a56a0']}]},options:pieOpts}); }
   else if(pz){ pz.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem dados.</p>'; }
 }
 
