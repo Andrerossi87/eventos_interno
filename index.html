@@ -378,6 +378,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
 <nav class="nav" id="nav-grp-adm" style="display:none">
   <div class="nav-sec">Administrativo</div>
   <button class="nav-item active" id="navadm-visao" onclick="goAdm('visao',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Status</button>
+  <button class="nav-item" id="navadm-graficos" onclick="goAdm('graficos',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,12 5,7 8,10 11,5 15,3"/></svg>Gráficos</button>
   <button class="nav-item" id="navadm-eventos" onclick="goAdm('eventos',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="12" rx="1.5"/><line x1="5" y1="1" x2="5" y2="5"/><line x1="11" y1="1" x2="11" y2="5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>Eventos</button>
   <button class="nav-item" id="navadm-cotacoes" onclick="goAdm('cotacoes',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Cotações</button>
 </nav>
@@ -715,6 +716,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
       <div class="page" id="page-adm-visao"></div>
     <div class="page" id="page-adm-cotacoes"></div>
     <div class="page" id="page-adm-eventos"></div>
+    <div class="page" id="page-adm-graficos"></div>
     <div class="page" id="page-adm-gastos"></div>
     <div class="page" id="page-adm-forn"></div>
     <div class="page" id="page-adm-cc"></div>
@@ -1062,6 +1064,7 @@ async function onLogin(user){
   await sb.auth.refreshSession();
   const {data:perfil}=await sb.from('perfis').select('*').eq('user_id',user.id).single();
   PERFIL=perfil||{role:'compras',nome:user.email.split('@')[0]};
+  try{ sb.from('perfis').update({ultimo_acesso:new Date().toISOString()}).eq('user_id',user.id).then(()=>{},()=>{}); }catch(e){}
   configurarUI();
   await carregarDados();
   setupRealtime();
@@ -3472,16 +3475,18 @@ function renderAdmPage(id){
   else if(id==='forn') renderAdmForn();
   else if(id==='cc') renderAdmCC();
   else if(id==='eventos') renderAdmEventos();
+  else if(id==='graficos') renderAdmGraficos();
 }
 async function admEnsure(){ if(!admLoaded){ await carregarADM(); admLoaded=true; } }
 async function carregarADM(){
-  const [cc,fo,co,ga]=await Promise.all([
+  const [cc,fo,co,ga,pe]=await Promise.all([
     sb.from('adm_centros_custo').select('*').order('nome'),
     sb.from('adm_fornecedores').select('*').order('nome'),
     sb.from('adm_cotacoes').select('*').order('item'),
     sb.from('adm_gastos').select('*').order('data',{ascending:false}),
+    sb.from('perfis').select('*'),
   ]);
-  ADM_CC=cc.data||[]; ADM_FORN=fo.data||[]; ADM_COT=co.data||[]; ADM_GASTOS=ga.data||[];
+  ADM_CC=cc.data||[]; ADM_FORN=fo.data||[]; ADM_COT=co.data||[]; ADM_GASTOS=ga.data||[]; ADM_PERFIS=pe.data||[];
 }
 async function admRefresh(){
   await carregarADM();
@@ -3501,10 +3506,23 @@ function admFornOptions(sel){ return `<option value="">— selecione —</option
 function admAutoCC(fornSelId,ccSelId){ const fn=document.getElementById(fornSelId).value; const f=ADM_FORN.find(x=>x.nome===fn); const ccEl=document.getElementById(ccSelId); if(f&&f.centro_custo&&ccEl){ ccEl.value=f.centro_custo; } }
 
 /* ===================== VISÃO GERAL (Status) ===================== */
+let admEvSel=new Set();
+let ADM_PERFIS=[];
+let ADM_AGENDA_EVS=[];
 let admAgendaRef=new Date();
 function admAgendaPrev(){admAgendaRef=new Date(admAgendaRef.getFullYear(),admAgendaRef.getMonth()-1,1);renderAdmAgenda();}
 function admAgendaNext(){admAgendaRef=new Date(admAgendaRef.getFullYear(),admAgendaRef.getMonth()+1,1);renderAdmAgenda();}
 function admAgendaHoje(){admAgendaRef=new Date();renderAdmAgenda();}
+function admEvLabel(){ return admEvSel.size===0?'Todos os eventos':admEvSel.size+' evento(s)'; }
+function admEvFilterHtml(pk){ return `<div style="position:relative" id="${pk}-wrap"><button type="button" onclick="admEvToggle('${pk}')" style="min-width:200px;text-align:left;padding:7px 26px 7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:#fff;cursor:pointer;position:relative">${admEvLabel()}<span style="position:absolute;right:9px">▾</span></button><div id="${pk}-drop" style="display:none;position:absolute;z-index:60;top:100%;left:0;margin-top:4px;width:280px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);padding:8px"><input id="${pk}-search" oninput="admEvList('${pk}')" placeholder="Buscar evento..." style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"/><div id="${pk}-list" style="max-height:200px;overflow:auto"></div><div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="admEvAplicar('${pk}')">Aplicar</button><button class="btn btn-ghost btn-sm" onclick="admEvLimpar('${pk}')">Limpar</button></div></div></div>`; }
+function admEvToggle(pk){ const d=document.getElementById(pk+'-drop'); if(!d) return; const vis=d.style.display!=='none'; d.style.display=vis?'none':'block'; if(!vis) admEvList(pk); }
+function admEvList(pk){ const se=document.getElementById(pk+'-search'); const q=(se?se.value:'').toLowerCase(); const evs=((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).filter(e=>!q||(e.nome||'').toLowerCase().includes(q)); const el=document.getElementById(pk+'-list'); if(!el) return; el.innerHTML=evs.map(e=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 2px;cursor:pointer"><input type="checkbox" class="admev-chk" value="${e.id}" ${admEvSel.has(e.id)?'checked':''}> ${admEsc(e.nome)}</label>`).join('')||'<p style="font-size:11px;color:var(--text3)">Nenhum evento.</p>'; }
+function admEvRerender(){ const a=document.querySelector('.page.active'); if(a&&a.id.indexOf('page-adm-')===0) renderAdmPage(a.id.replace('page-adm-','')); }
+function admEvAplicar(pk){ const vis=[...document.querySelectorAll('#'+pk+'-drop .admev-chk')].map(c=>c.value); const ck=[...document.querySelectorAll('#'+pk+'-drop .admev-chk:checked')].map(c=>c.value); vis.forEach(id=>admEvSel.delete(id)); ck.forEach(id=>admEvSel.add(id)); const d=document.getElementById(pk+'-drop'); if(d) d.style.display='none'; admEvRerender(); }
+function admEvLimpar(pk){ admEvSel=new Set(); const d=document.getElementById(pk+'-drop'); if(d) d.style.display='none'; admEvRerender(); }
+function admEvFiltradosEventos(){ const evs=((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]); return admEvSel.size===0?evs:evs.filter(e=>admEvSel.has(e.id)); }
+function admEvFiltradasCot(){ return admEvSel.size===0?ADM_COT:ADM_COT.filter(c=>admEvSel.has(c.evento_id)); }
+function admUltimoAcesso(){ const ps=ADM_PERFIS.filter(p=>p.ultimo_acesso).sort((a,b)=>new Date(b.ultimo_acesso)-new Date(a.ultimo_acesso)); if(!ps.length) return ''; const p=ps[0]; const d=new Date(p.ultimo_acesso); return `${admEsc(p.nome||'—')} — ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`; }
 function renderAdmAgenda(){
   const grid=document.getElementById('adm-agenda-grid'); const lbl=document.getElementById('adm-agenda-mes-label'); if(!grid) return;
   const Y=admAgendaRef.getFullYear(), M=admAgendaRef.getMonth();
@@ -3513,7 +3531,7 @@ function renderAdmAgenda(){
   const hoje=new Date(); hoje.setHours(0,0,0,0);
   const primeiro=new Date(Y,M,1); const inicioGrade=new Date(Y,M,1-primeiro.getDay());
   const parse=v=>v?new Date(v+'T00:00:00'):null;
-  const noDia=d=>((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).filter(e=>{ const i=parse(e.data_ini); if(!i) return false; const f=parse(e.data_fim)||i; const dd=new Date(d); dd.setHours(0,0,0,0); i.setHours(0,0,0,0); f.setHours(0,0,0,0); return dd>=i && dd<=f; });
+  const noDia=d=>ADM_AGENDA_EVS.filter(e=>{ const i=parse(e.data_ini); if(!i) return false; const f=parse(e.data_fim)||i; const dd=new Date(d); dd.setHours(0,0,0,0); i.setHours(0,0,0,0); f.setHours(0,0,0,0); return dd>=i && dd<=f; });
   const semanas=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   let html='<table class="agenda-table"><thead><tr>'+semanas.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>';
   for(let w=0;w<6;w++){ const linha=[]; for(let k=0;k<7;k++){const d=new Date(inicioGrade); d.setDate(inicioGrade.getDate()+w*7+k); linha.push(d);} if(w>=4 && linha.every(d=>d.getMonth()!==M)) continue; html+='<tr>';
@@ -3524,42 +3542,51 @@ function renderAdmAgenda(){
     html+='</tr>'; }
   html+='</tbody></table>'; grid.innerHTML=html;
 }
+function admKpisCalc(cots,eventos){ const itens={}; cots.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); }); let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; }); let orcado=0; eventos.forEach(e=>orcado+=admNum(e.orcado)); return {itens,orcado,cotacao,economia:orcado-cotacao}; }
 function renderAdmVisao(){
   const el=document.getElementById('page-adm-visao'); if(!el) return;
-  const itens={}; ADM_COT.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
-  let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; });
-  let orcado=0; [...new Set(ADM_COT.map(c=>c.evento_id).filter(Boolean))].forEach(id=>orcado+=eventOrcadoAdm(id));
-  const economia=orcado-cotacao;
-  const porDep={}; ADM_COT.forEach(c=>{ const k=c.centro_custo||'Sem centro'; const vf=admNum(c.valor_final); if(vf>0) porDep[k]=(porDep[k]||0)+vf; });
-  const depLabels=Object.keys(porDep), depVals=depLabels.map(k=>porDep[k]);
-  const totForn={}; ADM_COT.forEach(c=>{ const vf=admNum(c.valor_final); if(c.fornecedor&&vf>0) totForn[c.fornecedor]=(totForn[c.fornecedor]||0)+vf; });
-  const fornRank=Object.entries(totForn).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const evs=admEvFiltradosEventos(); const cots=admEvFiltradasCot(); ADM_AGENDA_EVS=evs;
+  const K=admKpisCalc(cots,evs);
   const kpis=[
-    {l:'Cotações',v:ADM_COT.length,c:'',s:'registradas'},
-    {l:'Itens',v:Object.keys(itens).length,c:'blue',s:'cotados'},
-    {l:'Orçado',v:fmtBR(orcado),c:'amber',s:'valor inicial'},
-    {l:'Cotação',v:fmtBR(cotacao),c:'blue',s:'melhor preço'},
-    {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'negociação'},
+    {l:'Cotações',v:cots.length,c:'',s:'registradas'},
+    {l:'Itens',v:Object.keys(K.itens).length,c:'blue',s:'cotados'},
+    {l:'Orçado',v:fmtBR(K.orcado),c:'amber',s:'valor bruto'},
+    {l:'Cotação',v:fmtBR(K.cotacao),c:'blue',s:'melhor preço'},
+    {l:'Economia',v:fmtBR(K.economia),c:K.economia>=0?'green':'red',s:'negociação'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
-  let rank;
-  if(fornRank.length){ const maxv=fornRank[0][1]||1; rank=fornRank.map(([n,v])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${admEsc(n)}</span><span style="font-family:'DM Mono',monospace;color:var(--green)">${fmtBR(v)}</span></div><div style="height:6px;background:var(--surface2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(v/maxv*100).toFixed(0)}%;background:var(--green)"></div></div></div>`).join(''); }
-  else rank='<p style="font-size:12px;color:var(--text3)">Sem economia registrada ainda.</p>';
-  el.innerHTML=admHead('Status','Visão geral das cotações em tempo real')+
-    `<div class="metrics-grid" style="margin-bottom:12px">${kpis}</div>
+  const ua=admUltimoAcesso();
+  el.innerHTML=admHead('Status','Visão geral em tempo real')+
+    `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('stev')}${ua?`<div style="font-size:11px;color:var(--text2)">Último acesso: <strong>${ua}</strong></div>`:''}</div>
+     <div class="metrics-grid" style="margin-bottom:12px">${kpis}</div>
      <div id="adm-alertas" style="margin-bottom:12px"></div>
-     <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de eventos</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>
-     <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px">
-       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por departamento</div><div style="height:260px"><canvas id="adm-ch-cc"></canvas></div></div>
-       <div class="card" style="flex:1;min-width:300px"><div class="card-title">Cotado por fornecedor</div>${rank}</div>
-     </div>`;
-  // alertas (cotações com data e prazo até 30 dias)
-  const als=((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).map(e=>{ const al=alertaInfo(e.data_ini,e.data_fim); return al?{e,al}:null; }).filter(x=>x&&x.al.dias>=0&&x.al.dias<=30).sort((a,b)=>a.al.dias-b.al.dias);
+     <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de eventos</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>`;
+  const als=evs.map(e=>{ const al=alertaInfo(e.data_ini,e.data_fim); return al?{e,al}:null; }).filter(x=>x&&x.al.dias>=0&&x.al.dias<=30).sort((a,b)=>a.al.dias-b.al.dias);
   const ael=document.getElementById('adm-alertas'); if(ael) ael.innerHTML=als.map(x=>`<div class="al ${x.al.cls}"><span class="al-icon">${x.al.icon}</span><div><strong>${admEsc(x.e.nome)}</strong> — ${x.al.txt}</div></div>`).join('');
   renderAdmAgenda();
-  if(admCharts.cc){ admCharts.cc.destroy(); }
-  const ctx=document.getElementById('adm-ch-cc');
-  if(ctx && depLabels.length){ admCharts.cc=new Chart(ctx,{type:'doughnut',data:{labels:depLabels,datasets:[{data:depVals,backgroundColor:['#1a56a0','#5bbfbc','#e0a32e','#c0504d','#7a9e3f','#8d6cab','#3f9e8e','#b5651d']}]},options:{plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},maintainAspectRatio:false}}); }
-  else if(ctx){ ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem cotações com valor ainda.</p>'; }
+}
+function renderAdmGraficos(){
+  const el=document.getElementById('page-adm-graficos'); if(!el) return;
+  const evs=admEvFiltradosEventos(); const cots=admEvFiltradasCot(); const K=admKpisCalc(cots,evs);
+  const kpis=[
+    {l:'Orçado',v:fmtBR(K.orcado),c:'amber',s:'valor bruto'},
+    {l:'Cotação (melhor)',v:fmtBR(K.cotacao),c:'blue',s:'menor por item'},
+    {l:'Economia',v:fmtBR(K.economia),c:K.economia>=0?'green':'red',s:'orçado − cotação'},
+    {l:'Itens cotados',v:Object.keys(K.itens).length,c:'',s:'no filtro'},
+  ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
+  const recs=Object.entries(K.itens).map(([it,rows])=>{ const wv=rows.filter(r=>admNum(r.valor_final)>0); if(!wv.length) return null; const st=wv.slice().sort((a,b)=>admNum(a.valor_final)-admNum(b.valor_final)); const b0=st[0],w0=st[st.length-1]; return {it,forn:b0.fornecedor||'—',val:admNum(b0.valor_final),eco:admNum(w0.valor_final)-admNum(b0.valor_final),n:wv.length}; }).filter(Boolean).sort((a,b)=>b.eco-a.eco);
+  const recHtml=recs.length?recs.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px"><strong>${admEsc(r.it)}</strong> → <span style="color:var(--green);font-weight:600">${admEsc(r.forn)}</span> <span style="font-family:'DM Mono',monospace">${fmtBR(r.val)}</span></div>${r.n>1&&r.eco>0?`<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:2px 8px;border-radius:10px">economia ${fmtBR(r.eco)}</span>`:`<span style="font-size:10px;color:var(--text3)">${r.n} cotação(ões)</span>`}</div>`).join(''):'<p style="font-size:12px;color:var(--text3)">Sem cotações ainda.</p>';
+  el.innerHTML=admHead('Gráficos','Indicadores e melhor cotação')+
+    `<div style="margin-bottom:12px">${admEvFilterHtml('grev')}</div>
+     <div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>
+     <div class="card mb"><div class="card-title">Orçado × Cotação por evento</div><div style="height:280px"><canvas id="adm-ch-linha"></canvas></div></div>
+     <div class="card"><div class="card-title">🏆 Melhor cotação por item (maior economia primeiro)</div>${recHtml}</div>`;
+  if(admCharts.linha){ admCharts.linha.destroy(); }
+  const ctx=document.getElementById('adm-ch-linha');
+  if(ctx){ const labels=evs.map(e=>e.nome); const orcArr=evs.map(e=>admNum(e.orcado));
+    const cotArr=evs.map(e=>{ const its={}; ADM_COT.filter(c=>c.evento_id===e.id).forEach(c=>{ const k=c.item||'x'; (its[k]=its[k]||[]).push(admNum(c.valor_final)); }); let t=0; Object.values(its).forEach(vs=>{ const f=vs.filter(v=>v>0); t+=f.length?Math.min(...f):0; }); return t; });
+    if(labels.length){ admCharts.linha=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Orçado',data:orcArr,borderColor:'#e0a32e',backgroundColor:'rgba(224,163,46,.12)',tension:.3,fill:true},{label:'Cotação',data:cotArr,borderColor:'#1a56a0',backgroundColor:'rgba(26,86,160,.12)',tension:.3,fill:true}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>'R$ '+Number(v).toLocaleString('pt-BR')}}}}}); }
+    else { ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem eventos no filtro.</p>'; }
+  }
 }
 
 /* ===================== COTAÇÕES ===================== */
@@ -3567,17 +3594,14 @@ function eventNomeAdm(id){ if(!id) return ''; const arr=(typeof EVENTOS!=='undef
 function eventOrcadoAdm(id){ if(!id) return 0; const arr=(typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]; const e=arr.find(x=>x.id===id); return e?admNum(e.orcado):0; }
 function renderAdmCotacoes(){
   const el=document.getElementById('page-adm-cotacoes'); if(!el) return;
-  const temEvento=!!admCotFEvento;
+  const umEvento=admEvSel.size===1?[...admEvSel][0]:null;
   const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button><button class="btn btn-primary" onclick="admOpenCot()">+ Nova cotação</button>`;
-  let filt=ADM_COT.slice();
-  if(admCotFEvento) filt=filt.filter(c=>c.evento_id===admCotFEvento);
+  let filt=admEvFiltradasCot().slice();
   if(admCotFItem) filt=filt.filter(c=>(c.item||'').toLowerCase().includes(admCotFItem.toLowerCase()));
   if(admCotFForn) filt=filt.filter(c=>(c.fornecedor||'')===admCotFForn);
   const itens={}; filt.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
   let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; });
-  let orcado=0;
-  if(admCotFEvento){ orcado=eventOrcadoAdm(admCotFEvento); }
-  else { [...new Set(filt.map(c=>c.evento_id).filter(Boolean))].forEach(id=>orcado+=eventOrcadoAdm(id)); }
+  let orcado=0; admEvFiltradosEventos().forEach(e=>{ if(admEvSel.size>0) orcado+=admNum(e.orcado); else if(ADM_COT.some(c=>c.evento_id===e.id)) orcado+=admNum(e.orcado); });
   const economia=orcado-cotacao;
   const kpis=[
     {l:'Itens cotados',v:Object.keys(itens).length,c:'',s:'no filtro'},
@@ -3586,13 +3610,8 @@ function renderAdmCotacoes(){
     {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'orçado − cotação'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const bestItem={}; Object.entries(itens).forEach(([k,rows])=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); bestItem[k]=vfs.length?Math.min(...vfs):null; });
-  const evOpts='<option value="">Todos os eventos</option>'+((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]).map(e=>`<option value="${e.id}" ${e.id===admCotFEvento?'selected':''}>${admEsc(e.nome)}</option>`).join('');
   const fornOpts='<option value="">Todos os fornecedores</option>'+[...new Set(ADM_COT.map(c=>c.fornecedor).filter(Boolean))].sort().map(f=>`<option ${f===admCotFForn?'selected':''}>${admEsc(f)}</option>`).join('');
-  const filtros=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <select onchange="admCotFEvento=this.value;renderAdmCotacoes()" style="min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${evOpts}</select>
-    <input value="${admEsc(admCotFItem)}" oninput="admCotFItem=this.value;renderAdmCotacoes()" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/>
-    <select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>
-    ${temEvento?'':'<p style="font-size:11px;color:var(--amber);margin:0 0 8px">Selecione um evento acima para poder cadastrar uma nova cotação.</p>'}`;
+  const filtros=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('cotev')}<input value="${admEsc(admCotFItem)}" oninput="admCotFItem=this.value;renderAdmCotacoes()" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/><select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>${umEvento?'':'<p style="font-size:11px;color:var(--amber);margin:0 0 8px">Para cadastrar uma nova cotação, selecione exatamente 1 evento no filtro.</p>'}`;
   filt.sort((a,b)=>{ const ia=(a.item||'').localeCompare(b.item||''); if(ia) return ia; return admNum(a.valor_final)-admNum(b.valor_final); });
   const linhas=filt.map(c=>{ const vf=admNum(c.valor_final); const best=bestItem[c.item||'(sem item)']; const isBest=best!=null&&vf>0&&vf===best; const evn=eventNomeAdm(c.evento_id);
     return `<tr style="border-bottom:1px solid var(--border)">
@@ -3612,15 +3631,13 @@ function renderAdmCotacoes(){
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Fornecedor</th>
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Centro custo</th>
     <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Valor cotado</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhuma cotação para o filtro. Selecione um evento e clique em "+ Nova cotação", ou importe sua planilha.</p>';
-  let recHtml='';
-  const recs=Object.entries(itens).map(([it,rows])=>{ const wv=rows.filter(r=>admNum(r.valor_final)>0); if(!wv.length) return null; const st=wv.slice().sort((a,b)=>admNum(a.valor_final)-admNum(b.valor_final)); const b0=st[0], w0=st[st.length-1]; return {it,forn:b0.fornecedor||'—',val:admNum(b0.valor_final),eco:admNum(w0.valor_final)-admNum(b0.valor_final),n:wv.length}; }).filter(Boolean);
-  if(recs.length){ recHtml=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--green)"><div class="card-title">\u{1F4A1} Melhor pre\u00e7o por item</div>`+recs.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px"><strong>${admEsc(r.it)}</strong> \u2192 <span style="color:var(--green);font-weight:600">${admEsc(r.forn)}</span> <span style="font-family:'DM Mono',monospace">${fmtBR(r.val)}</span> <span style="font-size:10px;color:var(--text3)">(${r.n} cota\u00e7\u00e3o${r.n!==1?'es':''})</span></div>${r.n>1&&r.eco>0?`<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:2px 8px;border-radius:10px">economia vs maior: ${fmtBR(r.eco)}</span>`:''}</div>`).join('')+`</div>`; }
-  el.innerHTML=admHead('Cotações','Selecione o evento e compare os fornecedores por item',acoes)+
-    `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>`+recHtml+`<div class="card">${filtros}${tabela}</div>`;
+  el.innerHTML=admHead('Cotações','Filtre por evento (1+), compare fornecedores por item',acoes)+
+    `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div><div class="card">${filtros}${tabela}</div>`;
 }
 function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
-  if(!c && !admCotFEvento){ toast('Selecione um evento no filtro primeiro.',true); return; }
-  const evId=c?c.evento_id:admCotFEvento;
+  const umEvento=admEvSel.size===1?[...admEvSel][0]:null;
+  if(!c && !umEvento){ toast('Selecione exatamente 1 evento no filtro para cadastrar.',true); return; }
+  const evId=c?c.evento_id:umEvento;
   document.getElementById('admcot-title').textContent=c?'Editar cotação':'Nova cotação';
   admSetVal('admcot-id',c?c.id:''); admSetVal('admcot-evento',evId||''); admSetVal('admcot-eventonome',eventNomeAdm(evId)||'(sem evento)');
   admSetVal('admcot-item',c?c.item:''); admSetVal('admcot-desc',c?c.descricao:'');
