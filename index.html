@@ -3596,6 +3596,7 @@ function renderAdmGraficos(){
 /* ===================== COTAÇÕES ===================== */
 function eventNomeAdm(id){ if(!id) return ''; const arr=(typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]; const e=arr.find(x=>x.id===id); return e?e.nome:''; }
 function eventOrcadoAdm(id){ if(!id) return 0; const arr=(typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]; const e=arr.find(x=>x.id===id); return e?admNum(e.orcado):0; }
+function admCotBusca(v){ admCotFItem=v; renderAdmCotacoes(); const el=document.getElementById('cot-busca-produto'); if(el){ el.focus(); try{ el.setSelectionRange(el.value.length,el.value.length); }catch(e){} } }
 function renderAdmCotacoes(){
   const el=document.getElementById('page-adm-cotacoes'); if(!el) return;
   const umEvento=admEvSel.size===1?[...admEvSel][0]:null;
@@ -3615,7 +3616,7 @@ function renderAdmCotacoes(){
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const bestItem={}; Object.entries(itens).forEach(([k,rows])=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); bestItem[k]=vfs.length?Math.min(...vfs):null; });
   const fornOpts='<option value="">Todos os fornecedores</option>'+[...new Set(ADM_COT.map(c=>c.fornecedor).filter(Boolean))].sort().map(f=>`<option ${f===admCotFForn?'selected':''}>${admEsc(f)}</option>`).join('');
-  const filtros=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('cotev')}<input value="${admEsc(admCotFItem)}" oninput="admCotFItem=this.value;renderAdmCotacoes()" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/><select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>${umEvento?'':'<p style="font-size:11px;color:var(--amber);margin:0 0 8px">Para cadastrar uma nova cotação, selecione exatamente 1 evento no filtro.</p>'}`;
+  const filtros=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('cotev')}<input id="cot-busca-produto" value="${admEsc(admCotFItem)}" oninput="admCotBusca(this.value)" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/><select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>${umEvento?'':'<p style="font-size:11px;color:var(--amber);margin:0 0 8px">Para cadastrar uma nova cotação, selecione exatamente 1 evento no filtro.</p>'}`;
   filt.sort((a,b)=>{ const ia=(a.item||'').localeCompare(b.item||''); if(ia) return ia; return admNum(a.valor_final)-admNum(b.valor_final); });
   const linhas=filt.map(c=>{ const vf=admNum(c.valor_final); const best=bestItem[c.item||'(sem item)']; const isBest=best!=null&&vf>0&&vf===best; const evn=eventNomeAdm(c.evento_id);
     return `<tr style="border-bottom:1px solid var(--border)">
