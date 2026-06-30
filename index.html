@@ -381,6 +381,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
   <button class="nav-item" id="navadm-graficos" onclick="goAdm('graficos',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,12 5,7 8,10 11,5 15,3"/></svg>Gráficos</button>
   <button class="nav-item" id="navadm-eventos" onclick="goAdm('eventos',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="12" rx="1.5"/><line x1="5" y1="1" x2="5" y2="5"/><line x1="11" y1="1" x2="11" y2="5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>Eventos</button>
   <button class="nav-item" id="navadm-cotacoes" onclick="goAdm('cotacoes',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Cotações</button>
+  <button class="nav-item" id="navadm-atividade" onclick="goAdm('atividade',this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4l2.5 1.5"/></svg>Atividade</button>
 </nav>
     <div class="sb-footer">
       <button class="btn-export" onclick="exportExcel()" id="btn-export-xl" style="display:none">
@@ -717,6 +718,7 @@ tr.item-pendente:hover td{background:#fff5dc;}
     <div class="page" id="page-adm-cotacoes"></div>
     <div class="page" id="page-adm-eventos"></div>
     <div class="page" id="page-adm-graficos"></div>
+    <div class="page" id="page-adm-atividade"></div>
     <div class="page" id="page-adm-gastos"></div>
     <div class="page" id="page-adm-forn"></div>
     <div class="page" id="page-adm-cc"></div>
@@ -2171,7 +2173,7 @@ async function salvarEvento(){
   );
   if(btnEv){btnEv.disabled=false;btnEv.innerHTML='Salvar evento';}
   if(resEv.error){toast('Erro ao salvar: '+resEv.error.message,true);return;}
-  closeModal('modal-ev'); toast('Evento salvo!'); await recarregarTela();
+  closeModal('modal-ev'); toast('Evento salvo!'); if(typeof admLog==='function'){ if(editId){ const oe=EVENTOS.find(e=>e.id===editId); const dd=admDiff(oe,payload,[['nome','Nome'],['data_ini','Início'],['data_fim','Fim'],['orcado','Orçamento']]); admLog('editou','evento', payload.nome+(dd?' — '+dd:'')); } else { admLog('criou','evento', payload.nome); } } await recarregarTela();
 }
 async function excluirEvento(id){
   if(!confirm('Tem certeza que deseja excluir este evento? Todos os itens e lançamentos vinculados serão removidos. Esta ação não pode ser desfeita.')) return;
@@ -2179,7 +2181,7 @@ async function excluirEvento(id){
   await sbQuery(()=>sb.from('controle_gastos').delete().eq('evento_id',id));
   const resDelEv=await sbQuery(()=>sb.from('eventos').delete().eq('id',id));
   if(resDelEv.error){toast('Erro ao excluir.',true);return;}
-  toast('Evento excluído.'); await recarregarTela();
+  toast('Evento excluído.'); if(typeof admLog==='function'){ const oe=EVENTOS.find(e=>e.id===id); admLog('excluiu','evento', oe?oe.nome:''); } await recarregarTela();
 }
 
 
@@ -3476,17 +3478,19 @@ function renderAdmPage(id){
   else if(id==='cc') renderAdmCC();
   else if(id==='eventos') renderAdmEventos();
   else if(id==='graficos') renderAdmGraficos();
+  else if(id==='atividade') renderAdmAtividade();
 }
 async function admEnsure(){ if(!admLoaded){ await carregarADM(); admLoaded=true; } }
 async function carregarADM(){
-  const [cc,fo,co,ga,pe]=await Promise.all([
+  const [cc,fo,co,ga,pe,lg]=await Promise.all([
     sb.from('adm_centros_custo').select('*').order('nome'),
     sb.from('adm_fornecedores').select('*').order('nome'),
     sb.from('adm_cotacoes').select('*').order('item'),
     sb.from('adm_gastos').select('*').order('data',{ascending:false}),
     sb.from('perfis').select('*'),
+    sb.from('adm_log').select('*').order('ts',{ascending:false}).limit(300),
   ]);
-  ADM_CC=cc.data||[]; ADM_FORN=fo.data||[]; ADM_COT=co.data||[]; ADM_GASTOS=ga.data||[]; ADM_PERFIS=pe.data||[];
+  ADM_CC=cc.data||[]; ADM_FORN=fo.data||[]; ADM_COT=co.data||[]; ADM_GASTOS=ga.data||[]; ADM_PERFIS=pe.data||[]; ADM_LOG=lg.data||[];
 }
 async function admRefresh(){
   await carregarADM();
@@ -3522,7 +3526,7 @@ function admEvAplicar(pk){ const vis=[...document.querySelectorAll('#'+pk+'-drop
 function admEvLimpar(pk){ admEvSel=new Set(); const d=document.getElementById(pk+'-drop'); if(d) d.style.display='none'; admEvRerender(); }
 function admEvFiltradosEventos(){ const evs=((typeof EVENTOS!=='undefined'&&EVENTOS)?EVENTOS:[]); return admEvSel.size===0?evs:evs.filter(e=>admEvSel.has(e.id)); }
 function admEvFiltradasCot(){ return admEvSel.size===0?ADM_COT:ADM_COT.filter(c=>admEvSel.has(c.evento_id)); }
-function admUltimoAcesso(){ const ps=ADM_PERFIS.filter(p=>p.ultimo_acesso).sort((a,b)=>new Date(b.ultimo_acesso)-new Date(a.ultimo_acesso)); if(!ps.length) return ''; const p=ps[0]; const d=new Date(p.ultimo_acesso); return `${admEsc(p.nome||'—')} — ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`; }
+function admUltimoAcesso(){ const ps=ADM_PERFIS.filter(p=>p.ultimo_acesso).sort((a,b)=>new Date(b.ultimo_acesso)-new Date(a.ultimo_acesso)); if(!ps.length) return ''; return ps.map(p=>{ const d=new Date(p.ultimo_acesso); return `${admEsc(p.nome||'—')} (${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})})`; }).join(' · '); }
 function renderAdmAgenda(){
   const grid=document.getElementById('adm-agenda-grid'); const lbl=document.getElementById('adm-agenda-mes-label'); if(!grid) return;
   const Y=admAgendaRef.getFullYear(), M=admAgendaRef.getMonth();
@@ -3556,7 +3560,7 @@ function renderAdmVisao(){
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const ua=admUltimoAcesso();
   el.innerHTML=admHead('Status','Visão geral em tempo real')+
-    `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('stev')}${ua?`<div style="font-size:11px;color:var(--text2)">Último acesso: <strong>${ua}</strong></div>`:''}</div>
+    `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('stev')}${ua?`<div style="font-size:11px;color:var(--text2)">Últimos acessos: <strong>${ua}</strong></div>`:''}</div>
      <div class="metrics-grid" style="margin-bottom:12px">${kpis}</div>
      <div id="adm-alertas" style="margin-bottom:12px"></div>
      <div class="card mb"><div class="agenda-head"><div class="card-title" style="margin:0">📅 Agenda de eventos</div><div class="agenda-nav"><button class="agenda-btn" onclick="admAgendaPrev()" title="Mês anterior">‹</button><span id="adm-agenda-mes-label" class="agenda-mes"></span><button class="agenda-btn" onclick="admAgendaNext()" title="Próximo mês">›</button><button class="agenda-btn agenda-hoje" onclick="admAgendaHoje()">Hoje</button></div></div><div id="adm-agenda-grid"></div><div class="agenda-legenda"><span><i class="agenda-dot" style="background:var(--blue)"></i> Futuro</span><span><i class="agenda-dot" style="background:var(--green)"></i> Em andamento</span><span><i class="agenda-dot" style="background:var(--text3)"></i> Encerrado</span></div></div>`;
@@ -3646,15 +3650,17 @@ function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
   admSetVal('admcot-data',c?c.data:''); admSetVal('admcot-dataf',c?c.data_final:''); admOpen('modal-admcot'); }
 async function admSalvarCot(){ const item=admVal('admcot-item').toUpperCase(); if(!item){toast('Informe o item.',true);return;}
   const rec={item,evento_id:admVal('admcot-evento')||null,descricao:(admVal('admcot-desc')||'').toUpperCase()||null,fornecedor:(admVal('admcot-forn')||'').toUpperCase()||null,solicitante:(admVal('admcot-solic')||'').toUpperCase()||null,centro_custo:(admVal('admcot-cc')||'').toUpperCase()||null,quantidade:admNum(admVal('admcot-qtd'))||null,valor_final:admNum(admVal('admcot-vfin'))||null,data:admVal('admcot-data')||null,data_final:admVal('admcot-dataf')||null};
-  const id=admVal('admcot-id');
+  const id=admVal('admcot-id'); const old=id?ADM_COT.find(x=>x.id===id):null;
   const r=id?await sbQuery(()=>sb.from('adm_cotacoes').update(rec).eq('id',id)):await sbQuery(()=>sb.from('adm_cotacoes').insert(rec));
-  if(r.error){toast('Erro ao salvar.',true);return;} closeModal('modal-admcot'); toast('Cotação salva!'); await admRefresh(); }
+  if(r.error){toast('Erro ao salvar.',true);return;} closeModal('modal-admcot'); toast('Cotação salva!');
+  if(id){ const d=admDiff(old,rec,[['item','Item'],['fornecedor','Fornecedor'],['valor_final','Valor'],['centro_custo','Centro custo'],['solicitante','Solicitante'],['quantidade','Qtd'],['descricao','Obs']]); admLog('editou','cotação', rec.item+(d?' — '+d:'')); } else { admLog('criou','cotação', rec.item+' / '+(rec.fornecedor||'—')+' = '+fmtBR(admNum(rec.valor_final))); }
+  await admRefresh(); }
 async function admDuplicarCot(id){ const c=ADM_COT.find(x=>x.id===id); if(!c) return;
   const rec={item:c.item,evento_id:c.evento_id,descricao:c.descricao,fornecedor:c.fornecedor,solicitante:c.solicitante,centro_custo:c.centro_custo,quantidade:c.quantidade,valor_final:c.valor_final,data:c.data,data_final:c.data_final};
   const r=await sbQuery(()=>sb.from('adm_cotacoes').insert(rec).select());
   if(r.error){toast('Erro ao duplicar.',true);return;} toast('Duplicado! Edite o fornecedor e o valor.'); await admRefresh();
   const novo=r.data&&r.data[0]; if(novo) admOpenCot(novo.id); }
-async function admDelCot(id){ if(!confirm('Excluir esta cotação?'))return; await sbQuery(()=>sb.from('adm_cotacoes').delete().eq('id',id)); toast('Cotação excluída.'); await admRefresh(); }
+async function admDelCot(id){ if(!confirm('Excluir esta cotação?'))return; const c=ADM_COT.find(x=>x.id===id); await sbQuery(()=>sb.from('adm_cotacoes').delete().eq('id',id)); if(c) admLog('excluiu','cotação', (c.item||'')+' / '+(c.fornecedor||'—')); toast('Cotação excluída.'); await admRefresh(); }
 
 /* ===================== GASTOS ===================== */
 function renderAdmGastos(){
@@ -3745,6 +3751,23 @@ function renderAdmEventos(){
   el.innerHTML=admHead('Eventos','Cadastre o evento e o valor do orçamento',acoes)+
     `<div class="card">${evs.length?`<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border2)"><th style="text-align:left;padding:8px 10px;font-size:10px;color:var(--text2);text-transform:uppercase">Evento</th><th style="text-align:left;padding:8px 10px;font-size:10px;color:var(--text2);text-transform:uppercase">Período</th><th style="text-align:right;padding:8px 10px;font-size:10px;color:var(--text2);text-transform:uppercase">Orçamento</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhum evento. Clique em "+ Novo evento".</p>'}</div>`;
 }
+
+/* ===================== ATIVIDADE / LOG ===================== */
+let ADM_LOG=[];
+async function admLog(acao,entidade,descricao){ try{ const u=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.nome)?PERFIL.nome:((typeof USER!=='undefined'&&USER&&USER.email)?USER.email:'—'); await sb.from('adm_log').insert({usuario:u,acao,entidade,descricao}); }catch(e){} }
+function admDiff(old,nov,campos){ const ch=[]; campos.forEach(([k,lbl])=>{ const a=old?old[k]:undefined; const b=nov[k]; const na=(a==null||a==='')?'—':String(a); const nb=(b==null||b==='')?'—':String(b); if(na!==nb) ch.push(`${lbl}: ${na} → ${nb}`); }); return ch.join('; '); }
+function renderAdmAtividade(){
+  const el=document.getElementById('page-adm-atividade'); if(!el) return;
+  const acoes=`<button ${admBtnG} onclick="admExportLog()">Exportar Excel</button>`;
+  const ps=ADM_PERFIS.filter(p=>p.ultimo_acesso).sort((a,b)=>new Date(b.ultimo_acesso)-new Date(a.ultimo_acesso));
+  const acc=ps.length?ps.map(p=>{ const d=new Date(p.ultimo_acesso); return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>${admEsc(p.nome||'—')}</span><span style="color:var(--text2);font-family:'DM Mono',monospace">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>`; }).join(''):'<p style="font-size:12px;color:var(--text3)">Sem registros.</p>';
+  const corAcao=a=>a==='criou'?'var(--green)':a==='excluiu'?'var(--red)':'var(--blue)';
+  const linhas=ADM_LOG.map(l=>{ const d=new Date(l.ts); return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 9px;font-size:11px;white-space:nowrap;font-family:'DM Mono',monospace">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td><td style="padding:7px 9px;font-size:12px">${admEsc(l.usuario||'—')}</td><td style="padding:7px 9px;font-size:11px;font-weight:600;color:${corAcao(l.acao)}">${admEsc((l.acao||'').toUpperCase())}</td><td style="padding:7px 9px;font-size:12px;color:var(--text2)">${admEsc(l.entidade||'')}</td><td style="padding:7px 9px;font-size:12px">${admEsc(l.descricao||'')}</td></tr>`; }).join('');
+  el.innerHTML=admHead('Atividade','Quem fez o quê, em qual campo e quando',acoes)+
+    `<div class="card mb"><div class="card-title">Últimos acessos</div>${acc}</div>
+     <div class="card"><div class="card-title">Histórico de alterações</div>${ADM_LOG.length?`<div style="overflow:auto;max-height:480px"><table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border2)"><th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Data/hora</th><th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Usuário</th><th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Ação</th><th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Tipo</th><th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Detalhe (campo alterado)</th></tr></thead><tbody>${linhas}</tbody></table></div>`:'<p style="font-size:13px;color:var(--text3)">Nenhuma atividade registrada ainda.</p>'}</div>`;
+}
+function admExportLog(){ const rows=ADM_LOG.map(l=>({Data:new Date(l.ts).toLocaleString('pt-BR'),Usuario:l.usuario||'',Acao:l.acao||'',Tipo:l.entidade||'',Detalhe:l.descricao||''})); const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Data:'',Usuario:'',Acao:'',Tipo:'',Detalhe:''}]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'atividade'); XLSX.writeFile(wb,'atividade_adm.xlsx'); }
 
 /* ===================== IMPORTAÇÃO ===================== */
 function admNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,''); }
