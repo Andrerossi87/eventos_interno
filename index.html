@@ -3554,7 +3554,7 @@ function renderAdmAgenda(){
     html+='</tr>'; }
   html+='</tbody></table>'; grid.innerHTML=html;
 }
-function admKpisCalc(cots,eventos){ const itens={}; cots.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); }); let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; }); let orcado=0; eventos.forEach(e=>orcado+=admNum(e.orcado)); return {itens,orcado,cotacao,economia:orcado-cotacao}; }
+function admKpisCalc(cots,eventos){ const itens={}; cots.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); }); let cotacao=0, escolhido=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); const best=vfs.length?Math.min(...vfs):0; cotacao+=best; const sel=rows.find(r=>r.selecionado); escolhido+=sel?admNum(sel.valor_final):best; }); let orcado=0; eventos.forEach(e=>orcado+=admNum(e.orcado)); return {itens,orcado,cotacao,escolhido,economia:orcado-escolhido}; }
 function renderAdmVisao(){
   const el=document.getElementById('page-adm-visao'); if(!el) return;
   const evs=admEvFiltradosEventos(); const cots=admEvFiltradasCot(); ADM_AGENDA_EVS=evs;
@@ -3564,7 +3564,8 @@ function renderAdmVisao(){
     {l:'Itens',v:Object.keys(K.itens).length,c:'blue',s:'cotados'},
     {l:'Orçado',v:fmtBR(K.orcado),c:'amber',s:'valor bruto'},
     {l:'Cotação',v:fmtBR(K.cotacao),c:'blue',s:'melhor preço'},
-    {l:'Economia',v:fmtBR(K.economia),c:K.economia>=0?'green':'red',s:'negociação'},
+    {l:'Escolhido',v:fmtBR(K.escolhido),c:'green',s:'realizado'},
+    {l:'Economia',v:fmtBR(K.economia),c:K.economia>=0?'green':'red',s:'orçado − escolhido'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const ua=admUltimoAcesso();
   el.innerHTML=admHead('Status','Visão geral em tempo real')+
@@ -3582,13 +3583,14 @@ function renderAdmGraficos(){
   const kpis=[
     {l:'Orçado',v:fmtBR(K.orcado),c:'amber',s:'valor bruto'},
     {l:'Cotação (melhor)',v:fmtBR(K.cotacao),c:'blue',s:'menor por item'},
-    {l:'Economia',v:fmtBR(K.economia),c:K.economia>=0?'green':'red',s:'orçado − cotação'},
+    {l:'Escolhido (realizado)',v:fmtBR(K.escolhido),c:'green',s:'fornecedor escolhido'},
+    {l:'Economia',v:fmtBR(K.economia),c:K.economia>=0?'green':'red',s:'orçado − escolhido'},
     {l:'Itens cotados',v:Object.keys(K.itens).length,c:'',s:'no filtro'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const recs=Object.entries(K.itens).map(([it,rows])=>{ const wv=rows.filter(r=>admNum(r.valor_final)>0); if(!wv.length) return null; const st=wv.slice().sort((a,b)=>admNum(a.valor_final)-admNum(b.valor_final)); const b0=st[0],w0=st[st.length-1]; return {it,forn:b0.fornecedor||'—',val:admNum(b0.valor_final),eco:admNum(w0.valor_final)-admNum(b0.valor_final),n:wv.length}; }).filter(Boolean).sort((a,b)=>b.eco-a.eco);
   const recHtml=recs.length?recs.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px"><strong>${admEsc(r.it)}</strong> → <span style="color:var(--green);font-weight:600">${admEsc(r.forn)}</span> <span style="font-family:'DM Mono',monospace">${fmtBR(r.val)}</span></div>${r.n>1&&r.eco>0?`<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:2px 8px;border-radius:10px">economia ${fmtBR(r.eco)}</span>`:`<span style="font-size:10px;color:var(--text3)">${r.n} cotação(ões)</span>`}</div>`).join(''):'<p style="font-size:12px;color:var(--text3)">Sem cotações ainda.</p>';
   const ccTot={};
-  Object.values(K.itens).forEach(rows=>{ const wv=rows.filter(r=>admNum(r.valor_final)>0); if(!wv.length) return; const best=wv.slice().sort((a,b)=>admNum(a.valor_final)-admNum(b.valor_final))[0]; const v=admNum(best.valor_final); let rt=[]; if(best.rateio){ try{ rt=JSON.parse(best.rateio); }catch(e){} } if(!rt.length) rt=[{cc:best.centro_custo||'Sem centro',pct:100}]; rt.forEach(x=>{ const k=x.cc||'Sem centro'; ccTot[k]=(ccTot[k]||0)+v*((x.pct||0)/100); }); });
+  Object.values(K.itens).forEach(rows=>{ const wv=rows.filter(r=>admNum(r.valor_final)>0); if(!wv.length) return; const escolha=wv.find(r=>r.selecionado)||wv.slice().sort((a,b)=>admNum(a.valor_final)-admNum(b.valor_final))[0]; const v=admNum(escolha.valor_final); let rt=[]; if(escolha.rateio){ try{ rt=JSON.parse(escolha.rateio); }catch(e){} } if(!rt.length) rt=[{cc:escolha.centro_custo||'Sem centro',pct:100}]; rt.forEach(x=>{ const k=x.cc||'Sem centro'; ccTot[k]=(ccTot[k]||0)+v*((x.pct||0)/100); }); });
   const ccLabels=Object.keys(ccTot), ccVals=ccLabels.map(k=>ccTot[k]);
   el.innerHTML=admHead('Gráficos','Indicadores e melhor cotação')+
     `<div style="margin-bottom:12px">${admEvFilterHtml('grev')}</div>
@@ -3603,7 +3605,8 @@ function renderAdmGraficos(){
   if(admCharts.linha){ admCharts.linha.destroy(); }
   const ctx=document.getElementById('adm-ch-linha');
   if(ctx){ const labels=evs.map(e=>e.nome); const orcArr=evs.map(e=>admNum(e.orcado)); const cotArr=evs.map(e=>{ const its={}; ADM_COT.filter(c=>c.evento_id===e.id).forEach(c=>{ const k=c.item||'x'; (its[k]=its[k]||[]).push(admNum(c.valor_final)); }); let t=0; Object.values(its).forEach(vs=>{ const f=vs.filter(v=>v>0); t+=f.length?Math.min(...f):0; }); return t; });
-    if(labels.length){ admCharts.linha=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Orçado',data:orcArr,backgroundColor:'#e0a32e',borderRadius:4,maxBarThickness:60},{label:'Cotação',data:cotArr,backgroundColor:'#1a56a0',borderRadius:4,maxBarThickness:60}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'R$ '+Number(v).toLocaleString('pt-BR')}}}}}); }
+    const escArr=evs.map(e=>{ const its={}; ADM_COT.filter(c=>c.evento_id===e.id).forEach(c=>{ const k=c.item||'x'; (its[k]=its[k]||[]).push(c); }); let t=0; Object.values(its).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); const best=vfs.length?Math.min(...vfs):0; const sel=rows.find(r=>r.selecionado); t+=sel?admNum(sel.valor_final):best; }); return t; });
+    if(labels.length){ admCharts.linha=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Orçado',data:orcArr,backgroundColor:'#e0a32e',borderRadius:4,maxBarThickness:60},{label:'Cotação (melhor)',data:cotArr,backgroundColor:'#1a56a0',borderRadius:4,maxBarThickness:60},{label:'Escolhido',data:escArr,backgroundColor:'#2d6a1f',borderRadius:4,maxBarThickness:60}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'R$ '+Number(v).toLocaleString('pt-BR')}}}}}); }
     else { ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem eventos no filtro.</p>'; } }
   if(admCharts.pzcc){ admCharts.pzcc.destroy(); }
   const ccx=document.getElementById('adm-pz-cc');
@@ -3632,14 +3635,15 @@ function renderAdmCotacoes(){
   if(admCotFItem) filt=filt.filter(c=>(c.item||'').toLowerCase().includes(admCotFItem.toLowerCase()));
   if(admCotFForn) filt=filt.filter(c=>(c.fornecedor||'')===admCotFForn);
   const itens={}; filt.forEach(c=>{ const k=(c.item||'(sem item)'); (itens[k]=itens[k]||[]).push(c); });
-  let cotacao=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); cotacao+=vfs.length?Math.min(...vfs):0; });
+  let cotacao=0, escolhido=0; Object.values(itens).forEach(rows=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); const best=vfs.length?Math.min(...vfs):0; cotacao+=best; const sel=rows.find(r=>r.selecionado); escolhido+=sel?admNum(sel.valor_final):best; });
   let orcado=0; admEvFiltradosEventos().forEach(e=>{ if(admEvSel.size>0) orcado+=admNum(e.orcado); else if(ADM_COT.some(c=>c.evento_id===e.id)) orcado+=admNum(e.orcado); });
-  const economia=orcado-cotacao;
+  const economia=orcado-escolhido;
   const kpis=[
     {l:'Itens cotados',v:Object.keys(itens).length,c:'',s:'no filtro'},
     {l:'Orçado (evento)',v:fmtBR(orcado),c:'amber',s:'valor bruto'},
     {l:'Cotação (melhor preço)',v:fmtBR(cotacao),c:'blue',s:'menor por item'},
-    {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'orçado − cotação'},
+    {l:'Escolhido (realizado)',v:fmtBR(escolhido),c:'green',s:'fornecedor escolhido'},
+    {l:'Economia',v:fmtBR(economia),c:economia>=0?'green':'red',s:'orçado − escolhido'},
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const bestItem={}; Object.entries(itens).forEach(([k,rows])=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); bestItem[k]=vfs.length?Math.min(...vfs):null; });
   const fornOpts='<option value="">Todos os fornecedores</option>'+[...new Set(ADM_COT.map(c=>c.fornecedor).filter(Boolean))].sort().map(f=>`<option ${f===admCotFForn?'selected':''}>${admEsc(f)}</option>`).join('');
@@ -3647,13 +3651,14 @@ function renderAdmCotacoes(){
   const corpo = umEvento ? `<div class="card">${prodForn}${tabela}</div>` : `<div class="card"><p style="font-size:13px;color:var(--text3)">Selecione <strong>exatamente 1 evento</strong> no filtro acima para visualizar e cadastrar as cotações.<br>Os KPIs acima consideram ${admEvSel.size===0?'todos os eventos':admEvSel.size+' evento(s)'} selecionado(s).</p></div>`;
   filt.sort((a,b)=>{ const ia=(a.item||'').localeCompare(b.item||''); if(ia) return ia; return admNum(a.valor_final)-admNum(b.valor_final); });
   const linhas=filt.map(c=>{ const vf=admNum(c.valor_final); const best=bestItem[c.item||'(sem item)']; const isBest=best!=null&&vf>0&&vf===best; const evn=eventNomeAdm(c.evento_id);
-    return `<tr style="border-bottom:1px solid var(--border)">
+    return `<tr style="border-bottom:1px solid var(--border);${c.selecionado?'background:var(--green-bg)':''}">
       <td style="padding:7px 9px;font-size:12px;font-weight:600">${admEsc(c.item)}</td>
       <td style="padding:7px 9px;font-size:11px;color:var(--text2)">${admEsc(evn||'—')}</td>
-      <td style="padding:7px 9px;font-size:12px">${admEsc(c.fornecedor||'—')} ${isBest?'<span style="font-size:9px;background:#d6efe0;color:var(--green);padding:1px 6px;border-radius:10px">menor</span>':''}</td>
+      <td style="padding:7px 9px;font-size:12px">${admEsc(c.fornecedor||'—')} ${isBest?'<span style="font-size:9px;background:#d6efe0;color:var(--green);padding:1px 6px;border-radius:10px">menor</span>':''} ${c.selecionado?'<span style="font-size:9px;background:var(--green);color:#fff;padding:1px 6px;border-radius:10px">escolhido</span>':''}</td>
       <td style="padding:7px 9px;font-size:11px;color:var(--text2)">${admEsc(c.centro_custo||'—')}</td>
       <td style="padding:7px 9px;text-align:right;font-size:12px;font-family:'DM Mono',monospace;${isBest?'color:var(--green);font-weight:700':''}">${vf>0?fmtBR(vf):'—'}</td>
       <td style="padding:7px 9px;text-align:right;white-space:nowrap">
+        <input type="checkbox" ${c.selecionado?'checked':''} onclick="admSelecionarCot('${c.id}')" title="Marcar fornecedor escolhido" style="margin-right:8px;vertical-align:middle;cursor:pointer;transform:scale(1.2)">
         <button class="btn btn-ghost btn-sm" title="Duplicar (cotar outro fornecedor)" onclick="admDuplicarCot('${c.id}')">⧉</button>
         <button class="btn btn-ghost btn-sm" onclick="admOpenCot('${c.id}')">✎</button>
         <button class="btn btn-danger btn-sm" onclick="admDelCot('${c.id}')">✕</button>
@@ -3693,6 +3698,7 @@ async function admDuplicarCot(id){ const c=ADM_COT.find(x=>x.id===id); if(!c) re
   if(r.error){toast('Erro ao duplicar.',true);return;} toast('Duplicado! Edite o fornecedor e o valor.'); await admRefresh();
   const novo=r.data&&r.data[0]; if(novo) admOpenCot(novo.id); }
 async function admDelCot(id){ if(!confirm('Excluir esta cotação?'))return; const c=ADM_COT.find(x=>x.id===id); await sbQuery(()=>sb.from('adm_cotacoes').delete().eq('id',id)); if(c) admLog('excluiu','cotação', (c.item||'')+' / '+(c.fornecedor||'—')); toast('Cotação excluída.'); await admRefresh(); }
+async function admSelecionarCot(id){ const c=ADM_COT.find(x=>x.id===id); if(!c) return; const novo=!c.selecionado; if(novo){ await sbQuery(()=>sb.from('adm_cotacoes').update({selecionado:false}).eq('item',c.item).eq('evento_id',c.evento_id)); } await sbQuery(()=>sb.from('adm_cotacoes').update({selecionado:novo}).eq('id',id)); if(typeof admLog==='function') admLog('editou','cotação', (c.item||'')+' — escolhido: '+(novo?(c.fornecedor||'—'):'(removido)')); toast(novo?'Fornecedor escolhido!':'Escolha removida.'); await admRefresh(); }
 
 /* ===================== GASTOS ===================== */
 function renderAdmGastos(){
