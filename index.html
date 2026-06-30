@@ -3582,13 +3582,13 @@ function renderAdmGraficos(){
   el.innerHTML=admHead('Gráficos','Indicadores e melhor cotação')+
     `<div style="margin-bottom:12px">${admEvFilterHtml('grev')}</div>
      <div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>
-     <div class="card mb"><div class="card-title">Orçado × Cotação por evento</div><div style="height:280px"><canvas id="adm-ch-linha"></canvas></div></div>
+     <div class="card mb"><div class="card-title">Orçado × Cotação por evento (barras)</div><div style="height:280px"><canvas id="adm-ch-linha"></canvas></div></div>
      <div class="card"><div class="card-title">🏆 Melhor cotação por item (maior economia primeiro)</div>${recHtml}</div>`;
   if(admCharts.linha){ admCharts.linha.destroy(); }
   const ctx=document.getElementById('adm-ch-linha');
   if(ctx){ const labels=evs.map(e=>e.nome); const orcArr=evs.map(e=>admNum(e.orcado));
     const cotArr=evs.map(e=>{ const its={}; ADM_COT.filter(c=>c.evento_id===e.id).forEach(c=>{ const k=c.item||'x'; (its[k]=its[k]||[]).push(admNum(c.valor_final)); }); let t=0; Object.values(its).forEach(vs=>{ const f=vs.filter(v=>v>0); t+=f.length?Math.min(...f):0; }); return t; });
-    if(labels.length){ admCharts.linha=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Orçado',data:orcArr,borderColor:'#e0a32e',backgroundColor:'rgba(224,163,46,.12)',tension:.3,fill:true},{label:'Cotação',data:cotArr,borderColor:'#1a56a0',backgroundColor:'rgba(26,86,160,.12)',tension:.3,fill:true}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>'R$ '+Number(v).toLocaleString('pt-BR')}}}}}); }
+    if(labels.length){ admCharts.linha=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Orçado',data:orcArr,backgroundColor:'#e0a32e',borderRadius:4,maxBarThickness:60},{label:'Cotação',data:cotArr,backgroundColor:'#1a56a0',borderRadius:4,maxBarThickness:60}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'R$ '+Number(v).toLocaleString('pt-BR')}}}}}); }
     else { ctx.parentElement.innerHTML='<p style="font-size:12px;color:var(--text3)">Sem eventos no filtro.</p>'; }
   }
 }
