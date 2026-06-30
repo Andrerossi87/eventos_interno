@@ -3623,7 +3623,7 @@ function admCotBusca(v){ admCotFItem=v; renderAdmCotacoes(); const el=document.g
 function renderAdmCotacoes(){
   const el=document.getElementById('page-adm-cotacoes'); if(!el) return;
   const umEvento=admEvSel.size===1?[...admEvSel][0]:null;
-  const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button><button class="btn btn-primary" onclick="admOpenCot()">+ Nova cotação</button>`;
+  const acoes=`<button ${admBtnG} onclick="admBaixarModelo('cotacoes')">Baixar modelo</button><button ${admBtnG} onclick="admImportOpen('cotacoes')">Importar planilha</button>${umEvento?'<button class="btn btn-primary" onclick="admOpenCot()">+ Nova cotação</button>':''}`;
   let filt=admEvFiltradasCot().slice();
   if(admCotFItem) filt=filt.filter(c=>(c.item||'').toLowerCase().includes(admCotFItem.toLowerCase()));
   if(admCotFForn) filt=filt.filter(c=>(c.fornecedor||'')===admCotFForn);
@@ -3639,7 +3639,8 @@ function renderAdmCotacoes(){
   ].map(m=>`<div class="metric"><div class="metric-label">${m.l}</div><div class="metric-value ${m.c}">${m.v}</div><div class="metric-sub">${m.s}</div></div>`).join('');
   const bestItem={}; Object.entries(itens).forEach(([k,rows])=>{ const vfs=rows.map(r=>admNum(r.valor_final)).filter(v=>v>0); bestItem[k]=vfs.length?Math.min(...vfs):null; });
   const fornOpts='<option value="">Todos os fornecedores</option>'+[...new Set(ADM_COT.map(c=>c.fornecedor).filter(Boolean))].sort().map(f=>`<option ${f===admCotFForn?'selected':''}>${admEsc(f)}</option>`).join('');
-  const filtros=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${admEvFilterHtml('cotev')}<input id="cot-busca-produto" value="${admEsc(admCotFItem)}" oninput="admCotBusca(this.value)" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/><select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>${umEvento?'':'<p style="font-size:11px;color:var(--amber);margin:0 0 8px">Para cadastrar uma nova cotação, selecione exatamente 1 evento no filtro.</p>'}`;
+  const prodForn=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="cot-busca-produto" value="${admEsc(admCotFItem)}" oninput="admCotBusca(this.value)" placeholder="Buscar por produto..." style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px"/><select onchange="admCotFForn=this.value;renderAdmCotacoes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">${fornOpts}</select></div>`;
+  const corpo = umEvento ? `<div class="card">${prodForn}${tabela}</div>` : `<div class="card"><p style="font-size:13px;color:var(--text3)">Selecione <strong>exatamente 1 evento</strong> no filtro acima para visualizar e cadastrar as cotações.<br>Os KPIs acima consideram ${admEvSel.size===0?'todos os eventos':admEvSel.size+' evento(s)'} selecionado(s).</p></div>`;
   filt.sort((a,b)=>{ const ia=(a.item||'').localeCompare(b.item||''); if(ia) return ia; return admNum(a.valor_final)-admNum(b.valor_final); });
   const linhas=filt.map(c=>{ const vf=admNum(c.valor_final); const best=bestItem[c.item||'(sem item)']; const isBest=best!=null&&vf>0&&vf===best; const evn=eventNomeAdm(c.evento_id);
     return `<tr style="border-bottom:1px solid var(--border)">
@@ -3659,8 +3660,8 @@ function renderAdmCotacoes(){
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Fornecedor</th>
     <th style="text-align:left;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Centro custo</th>
     <th style="text-align:right;padding:7px 9px;font-size:10px;color:var(--text2);text-transform:uppercase">Valor cotado</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`:'<p style="font-size:13px;color:var(--text3)">Nenhuma cotação para o filtro. Selecione um evento e clique em "+ Nova cotação", ou importe sua planilha.</p>';
-  el.innerHTML=admHead('Cotações','Filtre por evento (1+), compare fornecedores por item',acoes)+
-    `<div class="metrics-grid" style="margin-bottom:14px">${kpis}</div><div class="card">${filtros}${tabela}</div>`;
+  el.innerHTML=admHead('Cotações','Selecione 1 evento para cotar os itens',acoes)+
+    `<div style="margin-bottom:12px">${admEvFilterHtml('cotev')}</div><div class="metrics-grid" style="margin-bottom:14px">${kpis}</div>${corpo}`;
 }
 function admOpenCot(id){ const c=id?ADM_COT.find(x=>x.id===id):null;
   const umEvento=admEvSel.size===1?[...admEvSel][0]:null;
